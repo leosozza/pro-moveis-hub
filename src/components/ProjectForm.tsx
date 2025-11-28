@@ -69,7 +69,10 @@ export const ProjectForm = ({ onSuccess, onCancel }: ProjectFormProps) => {
       const { error } = await supabase
         .from("projects")
         .insert([{
-          ...data,
+          name: data.name,
+          customer_id: data.customer_id,
+          description: data.description || undefined,
+          status: data.status || undefined,
           company_id: profile.company_id,
           projetista_id: user.id,
         }]);
