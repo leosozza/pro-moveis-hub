@@ -69,7 +69,17 @@ export const ClientForm = ({ onSuccess, onCancel }: ClientFormProps) => {
       const { error } = await supabase
         .from("customers")
         .insert([{
-          ...data,
+          name: data.name,
+          email: data.email || undefined,
+          phone: data.phone || undefined,
+          whatsapp: data.whatsapp || undefined,
+          cpf_cnpj: data.cpf_cnpj || undefined,
+          address: data.address || undefined,
+          city: data.city || undefined,
+          state: data.state || undefined,
+          zip_code: data.zip_code || undefined,
+          origem: data.origem || undefined,
+          observacoes: data.observacoes || undefined,
           company_id: profile.company_id,
           created_by: user.id,
         }]);
