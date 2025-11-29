@@ -285,6 +285,7 @@ export type Database = {
           created_at: string
           email: string | null
           id: string
+          logo_url: string | null
           margem_padrao_chapa: number | null
           margem_padrao_ferragem: number | null
           name: string
@@ -298,6 +299,7 @@ export type Database = {
           created_at?: string
           email?: string | null
           id?: string
+          logo_url?: string | null
           margem_padrao_chapa?: number | null
           margem_padrao_ferragem?: number | null
           name: string
@@ -311,6 +313,7 @@ export type Database = {
           created_at?: string
           email?: string | null
           id?: string
+          logo_url?: string | null
           margem_padrao_chapa?: number | null
           margem_padrao_ferragem?: number | null
           name?: string
@@ -392,12 +395,94 @@ export type Database = {
           },
         ]
       }
+      deal_attachments: {
+        Row: {
+          created_at: string
+          deal_id: string
+          description: string | null
+          file_type: string
+          file_url: string
+          id: string
+          original_filename: string | null
+        }
+        Insert: {
+          created_at?: string
+          deal_id: string
+          description?: string | null
+          file_type: string
+          file_url: string
+          id?: string
+          original_filename?: string | null
+        }
+        Update: {
+          created_at?: string
+          deal_id?: string
+          description?: string | null
+          file_type?: string
+          file_url?: string
+          id?: string
+          original_filename?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "deal_attachments_deal_id_fkey"
+            columns: ["deal_id"]
+            isOneToOne: false
+            referencedRelation: "deals"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      deal_interactions: {
+        Row: {
+          content: string
+          created_at: string
+          deal_id: string
+          id: string
+          interaction_type: string
+          user_id: string | null
+        }
+        Insert: {
+          content: string
+          created_at?: string
+          deal_id: string
+          id?: string
+          interaction_type: string
+          user_id?: string | null
+        }
+        Update: {
+          content?: string
+          created_at?: string
+          deal_id?: string
+          id?: string
+          interaction_type?: string
+          user_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "deal_interactions_deal_id_fkey"
+            columns: ["deal_id"]
+            isOneToOne: false
+            referencedRelation: "deals"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "deal_interactions_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       deals: {
         Row: {
           actual_close_date: string | null
           company_id: string
           created_at: string
-          customer_id: string
+          customer_id: string | null
+          customer_name: string | null
+          customer_phone: string | null
           description: string | null
           estimated_value: number | null
           expected_close_date: string | null
@@ -416,7 +501,9 @@ export type Database = {
           actual_close_date?: string | null
           company_id: string
           created_at?: string
-          customer_id: string
+          customer_id?: string | null
+          customer_name?: string | null
+          customer_phone?: string | null
           description?: string | null
           estimated_value?: number | null
           expected_close_date?: string | null
@@ -435,7 +522,9 @@ export type Database = {
           actual_close_date?: string | null
           company_id?: string
           created_at?: string
-          customer_id?: string
+          customer_id?: string | null
+          customer_name?: string | null
+          customer_phone?: string | null
           description?: string | null
           estimated_value?: number | null
           expected_close_date?: string | null
@@ -608,6 +697,68 @@ export type Database = {
             columns: ["company_id"]
             isOneToOne: false
             referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      pipeline_tunnels: {
+        Row: {
+          action_type: string
+          company_id: string
+          created_at: string
+          id: string
+          source_stage_id: string
+          target_pipeline_id: string
+          target_stage_id: string | null
+          updated_at: string
+        }
+        Insert: {
+          action_type?: string
+          company_id: string
+          created_at?: string
+          id?: string
+          source_stage_id: string
+          target_pipeline_id: string
+          target_stage_id?: string | null
+          updated_at?: string
+        }
+        Update: {
+          action_type?: string
+          company_id?: string
+          created_at?: string
+          id?: string
+          source_stage_id?: string
+          target_pipeline_id?: string
+          target_stage_id?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "pipeline_tunnels_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "pipeline_tunnels_source_stage_id_fkey"
+            columns: ["source_stage_id"]
+            isOneToOne: false
+            referencedRelation: "stages"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "pipeline_tunnels_target_pipeline_id_fkey"
+            columns: ["target_pipeline_id"]
+            isOneToOne: false
+            referencedRelation: "pipelines"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "pipeline_tunnels_target_stage_id_fkey"
+            columns: ["target_stage_id"]
+            isOneToOne: false
+            referencedRelation: "stages"
             referencedColumns: ["id"]
           },
         ]
@@ -1012,6 +1163,8 @@ export type Database = {
           color: string | null
           created_at: string
           id: string
+          is_loss_stage: boolean | null
+          is_win_stage: boolean | null
           name: string
           pipeline_id: string
           position: number
@@ -1020,6 +1173,8 @@ export type Database = {
           color?: string | null
           created_at?: string
           id?: string
+          is_loss_stage?: boolean | null
+          is_win_stage?: boolean | null
           name: string
           pipeline_id: string
           position: number
@@ -1028,6 +1183,8 @@ export type Database = {
           color?: string | null
           created_at?: string
           id?: string
+          is_loss_stage?: boolean | null
+          is_win_stage?: boolean | null
           name?: string
           pipeline_id?: string
           position?: number

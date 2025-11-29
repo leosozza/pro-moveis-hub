@@ -6,18 +6,14 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { Loader2 } from "lucide-react";
-import { useQuery } from "@tanstack/react-query";
 
 const formSchema = z.object({
   title: z.string().min(2, "Título deve ter pelo menos 2 caracteres"),
-  customer_id: z.string().min(1, "Selecione um cliente"),
-  project_id: z.string().optional(),
-  estimated_value: z.string().optional(),
-  expected_close_date: z.string().optional(),
+  customer_name: z.string().min(2, "Nome do cliente é obrigatório"),
+  customer_phone: z.string().min(10, "Telefone/WhatsApp é obrigatório"),
   description: z.string().optional(),
 });
 
@@ -38,35 +34,9 @@ export const DealForm = ({ pipelineId, stageId, onSuccess, onCancel }: DealFormP
     resolver: zodResolver(formSchema),
     defaultValues: {
       title: "",
-      customer_id: "",
-      project_id: "",
-      estimated_value: "",
-      expected_close_date: "",
+      customer_name: "",
+      customer_phone: "",
       description: "",
-    },
-  });
-
-  const { data: customers } = useQuery({
-    queryKey: ["customers"],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from("customers")
-        .select("*")
-        .order("name");
-      if (error) throw error;
-      return data;
-    },
-  });
-
-  const { data: projects } = useQuery({
-    queryKey: ["projects"],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from("projects")
-        .select("*")
-        .order("name");
-      if (error) throw error;
-      return data;
     },
   });
 
@@ -84,14 +54,13 @@ export const DealForm = ({ pipelineId, stageId, onSuccess, onCancel }: DealFormP
 
       if (!profile) throw new Error("Perfil não encontrado");
 
+      // Criar deal com dados inline do cliente
       const { error } = await supabase
         .from("deals")
         .insert({
           title: data.title,
-          customer_id: data.customer_id,
-          project_id: data.project_id || null,
-          estimated_value: data.estimated_value ? parseFloat(data.estimated_value) : null,
-          expected_close_date: data.expected_close_date || null,
+          customer_name: data.customer_name,
+          customer_phone: data.customer_phone,
           description: data.description,
           company_id: profile.company_id,
           pipeline_id: pipelineId,
@@ -103,15 +72,15 @@ export const DealForm = ({ pipelineId, stageId, onSuccess, onCancel }: DealFormP
       if (error) throw error;
 
       toast({
-        title: "Deal criado",
-        description: "Deal adicionado com sucesso!",
+        title: "Lead criado",
+        description: "Lead adicionado com sucesso!",
       });
 
       form.reset();
       onSuccess?.();
     } catch (error: any) {
       toast({
-        title: "Erro ao criar deal",
+        title: "Erro ao criar lead",
         description: error.message,
         variant: "destructive",
       });
@@ -128,9 +97,9 @@ export const DealForm = ({ pipelineId, stageId, onSuccess, onCancel }: DealFormP
           name="title"
           render={({ field }) => (
             <FormItem>
-              <FormLabel>Título *</FormLabel>
+              <FormLabel>Título do Lead *</FormLabel>
               <FormControl>
-                <Input placeholder="Nome do negócio" {...field} />
+                <Input placeholder="Ex: Cozinha planejada" {...field} />
               </FormControl>
               <FormMessage />
             </FormItem>
@@ -139,24 +108,13 @@ export const DealForm = ({ pipelineId, stageId, onSuccess, onCancel }: DealFormP
 
         <FormField
           control={form.control}
-          name="customer_id"
+          name="customer_name"
           render={({ field }) => (
             <FormItem>
-              <FormLabel>Cliente *</FormLabel>
-              <Select onValueChange={field.onChange} defaultValue={field.value}>
-                <FormControl>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Selecione um cliente" />
-                  </SelectTrigger>
-                </FormControl>
-                <SelectContent>
-                  {customers?.map((customer) => (
-                    <SelectItem key={customer.id} value={customer.id}>
-                      {customer.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <FormLabel>Nome do Cliente *</FormLabel>
+              <FormControl>
+                <Input placeholder="Nome completo" {...field} />
+              </FormControl>
               <FormMessage />
             </FormItem>
           )}
@@ -164,67 +122,26 @@ export const DealForm = ({ pipelineId, stageId, onSuccess, onCancel }: DealFormP
 
         <FormField
           control={form.control}
-          name="project_id"
+          name="customer_phone"
           render={({ field }) => (
             <FormItem>
-              <FormLabel>Projeto</FormLabel>
-              <Select onValueChange={field.onChange} defaultValue={field.value}>
-                <FormControl>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Selecione um projeto (opcional)" />
-                  </SelectTrigger>
-                </FormControl>
-                <SelectContent>
-                  {projects?.map((project) => (
-                    <SelectItem key={project.id} value={project.id}>
-                      {project.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <FormLabel>Telefone/WhatsApp *</FormLabel>
+              <FormControl>
+                <Input placeholder="(00) 00000-0000" {...field} />
+              </FormControl>
               <FormMessage />
             </FormItem>
           )}
         />
-
-        <div className="grid grid-cols-2 gap-4">
-          <FormField
-            control={form.control}
-            name="estimated_value"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel>Valor Estimado</FormLabel>
-                <FormControl>
-                  <Input type="number" step="0.01" placeholder="0.00" {...field} />
-                </FormControl>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
-
-          <FormField
-            control={form.control}
-            name="expected_close_date"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel>Data Prevista</FormLabel>
-                <FormControl>
-                  <Input type="date" {...field} />
-                </FormControl>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
-        </div>
 
         <FormField
           control={form.control}
           name="description"
           render={({ field }) => (
             <FormItem>
-              <FormLabel>Descrição</FormLabel>
+              <FormLabel>Descrição Breve</FormLabel>
               <FormControl>
-                <Textarea placeholder="Detalhes do negócio" {...field} />
+                <Textarea placeholder="O que o cliente deseja..." {...field} />
               </FormControl>
               <FormMessage />
             </FormItem>
@@ -239,7 +156,7 @@ export const DealForm = ({ pipelineId, stageId, onSuccess, onCancel }: DealFormP
           )}
           <Button type="submit" disabled={isSubmitting}>
             {isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-            Criar Deal
+            Criar Lead
           </Button>
         </div>
       </form>
