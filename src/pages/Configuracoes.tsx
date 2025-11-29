@@ -8,7 +8,9 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Plus, Trash2, Loader2, DollarSign } from "lucide-react";
+import { Plus, Trash2, Loader2, DollarSign, Upload } from "lucide-react";
+import { PipelineConfig } from "@/components/PipelineConfig";
+import { PipelineTunnelConfig } from "@/components/PipelineTunnelConfig";
 import { toast } from "sonner";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
@@ -186,9 +188,55 @@ const Configuracoes = () => {
           <TabsTrigger value="company">Empresa</TabsTrigger>
           <TabsTrigger value="prices">Tabelas de Preço</TabsTrigger>
           <TabsTrigger value="margins">Regras de Margem</TabsTrigger>
+          <TabsTrigger value="pipelines">Pipelines</TabsTrigger>
+          <TabsTrigger value="tunnels">Túneis</TabsTrigger>
         </TabsList>
 
         <TabsContent value="company" className="space-y-4">
+          <Card>
+            <CardHeader>
+              <CardTitle>Logotipo da Empresa</CardTitle>
+              <CardDescription>Personalize seu CRM com o logo da sua marcenaria</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="flex items-center gap-4">
+                {company?.logo_url && (
+                  <img src={company.logo_url} alt="Logo" className="h-16 w-auto object-contain" />
+                )}
+                <div>
+                  <Label htmlFor="logo-upload">Upload de Logo</Label>
+                  <Input
+                    id="logo-upload"
+                    type="file"
+                    accept="image/*"
+                    onChange={async (e) => {
+                      const file = e.target.files?.[0];
+                      if (!file) return;
+                      
+                      const fileExt = file.name.split('.').pop();
+                      const fileName = `logos/${company?.id}.${fileExt}`;
+                      
+                      const { error: uploadError } = await supabase.storage
+                        .from('project-files')
+                        .upload(fileName, file, { upsert: true });
+                      
+                      if (uploadError) {
+                        toast.error("Erro ao enviar logo");
+                        return;
+                      }
+                      
+                      const { data: { publicUrl } } = supabase.storage
+                        .from('project-files')
+                        .getPublicUrl(fileName);
+                      
+                      updateCompany.mutate({ logo_url: publicUrl });
+                    }}
+                  />
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
           <Card>
             <CardHeader>
               <CardTitle>Configurações da Empresa</CardTitle>
@@ -361,6 +409,14 @@ const Configuracoes = () => {
               </Table>
             </CardContent>
           </Card>
+        </TabsContent>
+
+        <TabsContent value="pipelines">
+          <PipelineConfig />
+        </TabsContent>
+
+        <TabsContent value="tunnels">
+          <PipelineTunnelConfig />
         </TabsContent>
       </Tabs>
 
