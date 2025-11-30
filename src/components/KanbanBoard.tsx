@@ -68,8 +68,6 @@ export const KanbanBoard = ({
     setIsMovingCard(true);
     try {
       await onCardMove(draggedCard.id, stageId);
-    } catch (error) {
-      console.error('Erro ao mover card:', error);
     } finally {
       setIsMovingCard(false);
       setDraggedCard(null);
