@@ -11,11 +11,22 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Loader2 } from "lucide-react";
 import { toast } from "sonner";
 
+interface Ticket {
+  id: string;
+  title: string;
+  stage_id: string;
+  position: number;
+  priority?: string;
+  customers?: { name: string } | null;
+  projects?: { name: string } | null;
+  profiles?: { full_name: string } | null;
+}
+
 const Assistencia = () => {
   const queryClient = useQueryClient();
   const [openNewTicket, setOpenNewTicket] = useState(false);
   const [selectedStageId, setSelectedStageId] = useState<string>("");
-  const [selectedTicket, setSelectedTicket] = useState<any>(null);
+  const [selectedTicket, setSelectedTicket] = useState<Ticket | null>(null);
   const [formData, setFormData] = useState({
     title: "",
     description: "",
@@ -31,9 +42,18 @@ const Assistencia = () => {
         .from("pipelines")
         .select("*, stages(*)")
         .eq("type", "assistencia")
-        .single();
+        .order("created_at", { ascending: true })
+        .limit(1);
       if (error) throw error;
-      return data;
+      
+      const pipelineData = data?.[0] || null;
+      
+      // Ordenar stages por position
+      if (pipelineData?.stages) {
+        pipelineData.stages = pipelineData.stages.sort((a: { position: number }, b: { position: number }) => a.position - b.position);
+      }
+      
+      return pipelineData;
     },
   });
 
