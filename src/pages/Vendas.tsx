@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { usePipelineByType } from "@/modules/crm/hooks/usePipelines";
 import { useDeals } from "@/modules/crm/hooks/useDeals";
@@ -38,10 +38,10 @@ const Vendas = () => {
   };
 
   // Map deals to include customers property for KanbanBoard compatibility
-  const mappedDeals = deals.map(d => ({
+  const mappedDeals = useMemo(() => deals.map(d => ({
     ...d,
     customers: d.customer_name ? { name: d.customer_name } : d.customers,
-  }));
+  })), [deals]);
 
   if (pipelineLoading || dealsLoading) {
     return (

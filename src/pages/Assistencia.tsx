@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { useMutation, useQueryClient, useQuery } from "@tanstack/react-query";
 import { usePipelineByType } from "@/modules/crm/hooks/usePipelines";
 import { useServiceTickets } from "@/modules/support/hooks/useServiceTickets";
@@ -101,7 +101,7 @@ const Assistencia = () => {
   };
 
   // Map tickets to KanbanCard format
-  const kanbanCards = tickets.map(ticket => ({
+  const kanbanCards = useMemo(() => tickets.map(ticket => ({
     id: ticket.id,
     title: ticket.title,
     description: ticket.description,
@@ -109,7 +109,7 @@ const Assistencia = () => {
     position: ticket.position,
     customers: ticket.customers,
     priority: ticket.priority || undefined,
-  }));
+  })), [tickets]);
 
   if (pipelineLoading || ticketsLoading) {
     return (

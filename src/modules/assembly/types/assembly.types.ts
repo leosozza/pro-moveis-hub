@@ -9,7 +9,7 @@ export interface AssemblyOrder {
   deal_id: string | null;
   montador_id: string | null;
   scheduled_date: string | null;
-  status: string;
+  status: AssemblyStatus;
   observations: string | null;
   material_request: string | null;
   assembly_value: number | null;

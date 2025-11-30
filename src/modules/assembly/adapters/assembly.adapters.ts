@@ -2,7 +2,7 @@
 // Functions to map database rows to domain types
 
 import type { Tables } from '@/integrations/supabase/types';
-import type { AssemblyOrder, FinalInspection } from '../types/assembly.types';
+import type { AssemblyOrder, FinalInspection, AssemblyStatus } from '../types/assembly.types';
 
 type AssemblyOrderRow = Tables<'assembly_orders'>;
 type FinalInspectionRow = Tables<'final_inspections'>;
@@ -18,7 +18,7 @@ export function mapOrderRowToOrder(row: AssemblyOrderRow & {
     deal_id: row.deal_id,
     montador_id: row.montador_id,
     scheduled_date: row.scheduled_date,
-    status: row.status,
+    status: row.status as AssemblyStatus,
     observations: row.observations,
     material_request: row.material_request,
     assembly_value: row.assembly_value,
