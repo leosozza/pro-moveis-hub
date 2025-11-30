@@ -13,7 +13,15 @@ DECLARE
   main_stage_id UUID;
   dup_stage_id UUID;
   stage_rec RECORD;
+  tunnel_table_exists BOOLEAN;
 BEGIN
+  -- Check if pipeline_tunnels table exists
+  SELECT EXISTS (
+    SELECT FROM information_schema.tables 
+    WHERE table_schema = 'public' 
+    AND table_name = 'pipeline_tunnels'
+  ) INTO tunnel_table_exists;
+
   -- For each company_id and type combination that has duplicates
   FOR rec IN 
     SELECT company_id, type, array_agg(id ORDER BY created_at) as pipeline_ids
@@ -51,10 +59,12 @@ BEGIN
               pipeline_id = main_pipeline_id
           WHERE stage_id = stage_rec.dup_stage_id;
           
-          -- Delete pipeline tunnels referencing duplicate stage
-          DELETE FROM public.pipeline_tunnels
-          WHERE source_stage_id = stage_rec.dup_stage_id
-             OR target_stage_id = stage_rec.dup_stage_id;
+          -- Delete pipeline tunnels referencing duplicate stage (if table exists)
+          IF tunnel_table_exists THEN
+            DELETE FROM public.pipeline_tunnels
+            WHERE source_stage_id = stage_rec.dup_stage_id
+               OR target_stage_id = stage_rec.dup_stage_id;
+          END IF;
         ELSE
           -- If no corresponding stage exists, get first stage of main pipeline
           SELECT id INTO main_stage_id
@@ -74,19 +84,23 @@ BEGIN
               pipeline_id = main_pipeline_id
           WHERE stage_id = stage_rec.dup_stage_id;
           
-          -- Delete pipeline tunnels referencing duplicate stage
-          DELETE FROM public.pipeline_tunnels
-          WHERE source_stage_id = stage_rec.dup_stage_id
-             OR target_stage_id = stage_rec.dup_stage_id;
+          -- Delete pipeline tunnels referencing duplicate stage (if table exists)
+          IF tunnel_table_exists THEN
+            DELETE FROM public.pipeline_tunnels
+            WHERE source_stage_id = stage_rec.dup_stage_id
+               OR target_stage_id = stage_rec.dup_stage_id;
+          END IF;
         END IF;
       END LOOP;
       
       -- Delete duplicate stages (CASCADE will handle them)
       -- Note: stages have CASCADE DELETE from pipelines
       
-      -- Delete pipeline tunnels referencing duplicate pipeline
-      DELETE FROM public.pipeline_tunnels
-      WHERE target_pipeline_id = dup_pipeline_id;
+      -- Delete pipeline tunnels referencing duplicate pipeline (if table exists)
+      IF tunnel_table_exists THEN
+        DELETE FROM public.pipeline_tunnels
+        WHERE target_pipeline_id = dup_pipeline_id;
+      END IF;
       
       -- Delete the duplicate pipeline (stages will be deleted by CASCADE)
       DELETE FROM public.pipelines WHERE id = dup_pipeline_id;

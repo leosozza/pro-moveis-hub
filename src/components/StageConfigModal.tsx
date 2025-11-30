@@ -1,7 +1,17 @@
-import { useState } from "react";
+import { useState, useCallback } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -36,7 +46,9 @@ export const StageConfigModal = ({
   const queryClient = useQueryClient();
   const [openNewStage, setOpenNewStage] = useState(false);
   const [openEditStage, setOpenEditStage] = useState(false);
+  const [openDeleteConfirm, setOpenDeleteConfirm] = useState(false);
   const [editingStage, setEditingStage] = useState<Stage | null>(null);
+  const [stageToDelete, setStageToDelete] = useState<string | null>(null);
 
   const { data: stages, isLoading } = useQuery({
     queryKey: ["pipeline_stages", pipelineId],
@@ -122,6 +134,7 @@ export const StageConfigModal = ({
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["pipeline_stages", pipelineId] });
       toast.success("Etapa removida com sucesso!");
+      setStageToDelete(null);
       onSuccess?.();
     },
     onError: (error: Error) => {
@@ -166,6 +179,33 @@ export const StageConfigModal = ({
       toast.error(error.message || "Erro ao reordenar etapa");
     },
   });
+
+  const handleDeleteClick = useCallback((stageId: string) => {
+    setStageToDelete(stageId);
+    setOpenDeleteConfirm(true);
+  }, []);
+
+  const handleConfirmDelete = useCallback(() => {
+    if (stageToDelete) {
+      deleteStage.mutate(stageToDelete);
+    }
+    setOpenDeleteConfirm(false);
+  }, [stageToDelete, deleteStage]);
+
+  const handleEditClick = useCallback((stage: Stage) => {
+    setEditingStage(stage);
+    setOpenEditStage(true);
+  }, []);
+
+  const handleCreateSubmit = useCallback((e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    createStage.mutate(new FormData(e.currentTarget));
+  }, [createStage]);
+
+  const handleUpdateSubmit = useCallback((e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    updateStage.mutate(new FormData(e.currentTarget));
+  }, [updateStage]);
 
   return (
     <>
@@ -239,10 +279,7 @@ export const StageConfigModal = ({
                       <Button
                         size="sm"
                         variant="ghost"
-                        onClick={() => {
-                          setEditingStage(stage);
-                          setOpenEditStage(true);
-                        }}
+                        onClick={() => handleEditClick(stage)}
                       >
                         <Edit className="h-4 w-4" />
                       </Button>
@@ -250,11 +287,7 @@ export const StageConfigModal = ({
                         size="sm"
                         variant="ghost"
                         disabled={deleteStage.isPending}
-                        onClick={() => {
-                          if (confirm("Tem certeza que deseja remover esta etapa? Cards nesta etapa podem ser afetados.")) {
-                            deleteStage.mutate(stage.id);
-                          }
-                        }}
+                        onClick={() => handleDeleteClick(stage.id)}
                       >
                         <Trash2 className="h-4 w-4" />
                       </Button>
@@ -274,10 +307,7 @@ export const StageConfigModal = ({
             <DialogTitle>Nova Etapa</DialogTitle>
             <DialogDescription>Adicione uma nova etapa ao pipeline</DialogDescription>
           </DialogHeader>
-          <form onSubmit={(e) => {
-            e.preventDefault();
-            createStage.mutate(new FormData(e.currentTarget));
-          }}>
+          <form onSubmit={handleCreateSubmit}>
             <div className="space-y-4">
               <div>
                 <Label htmlFor="new_name">Nome da Etapa</Label>
@@ -317,10 +347,7 @@ export const StageConfigModal = ({
             <DialogDescription>Altere as propriedades da etapa</DialogDescription>
           </DialogHeader>
           {editingStage && (
-            <form onSubmit={(e) => {
-              e.preventDefault();
-              updateStage.mutate(new FormData(e.currentTarget));
-            }}>
+            <form onSubmit={handleUpdateSubmit}>
               <div className="space-y-4">
                 <div>
                   <Label htmlFor="edit_name">Nome da Etapa</Label>
@@ -352,6 +379,24 @@ export const StageConfigModal = ({
           )}
         </DialogContent>
       </Dialog>
+
+      {/* AlertDialog de Confirmação de Exclusão */}
+      <AlertDialog open={openDeleteConfirm} onOpenChange={setOpenDeleteConfirm}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Confirmar exclusão</AlertDialogTitle>
+            <AlertDialogDescription>
+              Tem certeza que deseja remover esta etapa? Cards nesta etapa podem ser afetados.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+            <AlertDialogAction onClick={handleConfirmDelete}>
+              Remover
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </>
   );
 };
