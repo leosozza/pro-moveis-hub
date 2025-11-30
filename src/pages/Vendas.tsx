@@ -23,6 +23,12 @@ const Vendas = () => {
         .eq("type", "vendas")
         .single();
       if (error) throw error;
+      
+      // Ordenar stages por position
+      if (data?.stages) {
+        data.stages = data.stages.sort((a: any, b: any) => a.position - b.position);
+      }
+      
       return data;
     },
   });
@@ -62,6 +68,26 @@ const Vendas = () => {
     );
   }
 
+  // Verificar se o pipeline existe e tem estágios
+  if (!pipeline?.id || !pipeline?.stages || pipeline.stages.length === 0) {
+    return (
+      <div className="p-8">
+        <div className="mb-8">
+          <h1 className="text-3xl font-bold mb-2">Pipeline de Vendas</h1>
+          <p className="text-muted-foreground">Gerencie seus leads e oportunidades de venda</p>
+        </div>
+        <div className="flex items-center justify-center h-64 border-2 border-dashed rounded-lg">
+          <div className="text-center">
+            <p className="text-lg font-medium">Pipeline vazio!</p>
+            <p className="text-sm text-muted-foreground mt-2">
+              Configure seu pipeline em Configurações → Pipelines
+            </p>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="p-8">
       <div className="mb-8">
@@ -69,15 +95,13 @@ const Vendas = () => {
         <p className="text-muted-foreground">Gerencie seus leads e oportunidades de venda</p>
       </div>
 
-      {pipeline && (
-        <KanbanBoard
-          stages={pipeline.stages || []}
-          cards={deals || []}
-          onCardClick={handleCardClick}
-          onAddCard={handleAddCard}
-          tableName="deals"
-        />
-      )}
+      <KanbanBoard
+        stages={pipeline.stages}
+        cards={deals || []}
+        onCardClick={handleCardClick}
+        onAddCard={handleAddCard}
+        tableName="deals"
+      />
 
       <Dialog open={openNewDeal} onOpenChange={setOpenNewDeal}>
         <DialogContent className="max-w-2xl">

@@ -6,63 +6,115 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
-// Função auxiliar para extrair valores de tags XML
-function extractXmlValue(xml: string, tagName: string): string {
+// Extrair dados do cliente do XML Promob
+function extractCustomerData(xml: string): { name: string; phone: string; email: string } {
+  const nameMatch = xml.match(/<DATA ID="nomecliente" VALUE="([^"]*)"\/>/i);
+  const phoneMatch = xml.match(/<DATA ID="celular" VALUE="([^"]*)"\/>/i);
+  const emailMatch = xml.match(/<DATA ID="email" VALUE="([^"]*)"\/>/i);
+
+  return {
+    name: nameMatch ? nameMatch[1].trim() : '',
+    phone: phoneMatch ? phoneMatch[1].trim() : '',
+    email: emailMatch ? emailMatch[1].trim() : '',
+  };
+}
+
+// Extrair ambientes do XML Promob
+function extractAmbients(xml: string): string[] {
+  const ambients: string[] = [];
+  const ambientRegex = /<AMBIENT[^>]*DESCRIPTION="([^"]*)"[^>]*>/gi;
+  let match;
+
+  while ((match = ambientRegex.exec(xml)) !== null) {
+    if (match[1] && match[1].trim()) {
+      ambients.push(match[1].trim());
+    }
+  }
+
+  return ambients;
+}
+
+// Extrair atributo de tag XML (atributos são UPPERCASE no Promob)
+function extractAttribute(itemTag: string, attrName: string): string {
+  const regex = new RegExp(`${attrName}="([^"]*)"`, 'i');
+  const match = itemTag.match(regex);
+  return match ? match[1].trim() : '';
+}
+
+// Extrair valor de tag aninhada
+function extractNestedValue(xml: string, tagName: string): string {
   const regex = new RegExp(`<${tagName}[^>]*>([^<]*)<\/${tagName}>`, 'i');
   const match = xml.match(regex);
   return match ? match[1].trim() : '';
 }
 
-// Função auxiliar para extrair todos os itens
-function extractItems(xml: string): any[] {
+// Extrair itens do XML Promob
+function extractItems(xml: string, ambiente: string): any[] {
   const items: any[] = [];
-  const itemRegex = /<Item[^>]*>([\s\S]*?)<\/Item>/gi;
+  
+  // Encontrar seção do ambiente
+  const ambientRegex = new RegExp(
+    `<AMBIENT[^>]*DESCRIPTION="${ambiente}"[^>]*>([\\s\\S]*?)<\\/AMBIENT>`,
+    'gi'
+  );
+  const ambientMatch = xml.match(ambientRegex);
+  
+  if (!ambientMatch) return items;
+  
+  const ambientXml = ambientMatch[0];
+  
+  // Extrair todos os ITEM dentro deste ambiente
+  const itemRegex = /<ITEM\s([^>]*)>([\s\S]*?)<\/ITEM>/gi;
   let match;
 
-  while ((match = itemRegex.exec(xml)) !== null) {
-    const itemXml = match[1];
+  while ((match = itemRegex.exec(ambientXml)) !== null) {
+    const itemAttributes = match[1];
+    const itemContent = match[2];
     
-    const referencia = extractXmlValue(itemXml, 'Referencia') || extractXmlValue(itemXml, 'Codigo');
-    const descricao = extractXmlValue(itemXml, 'Descricao') || extractXmlValue(itemXml, 'Nome') || 'Item';
-    const larguraStr = extractXmlValue(itemXml, 'Largura') || extractXmlValue(itemXml, 'Width');
-    const alturaStr = extractXmlValue(itemXml, 'Altura') || extractXmlValue(itemXml, 'Height');
-    const profundidadeStr = extractXmlValue(itemXml, 'Profundidade') || extractXmlValue(itemXml, 'Depth');
-    const quantidadeStr = extractXmlValue(itemXml, 'Quantidade') || extractXmlValue(itemXml, 'Repeticao') || '1';
-    const material = extractXmlValue(itemXml, 'Material');
-    const modelo = extractXmlValue(itemXml, 'Modelo');
-    const espessura = extractXmlValue(itemXml, 'Espessura');
-
-    const largura = parseFloat(larguraStr) || 0;
-    const altura = parseFloat(alturaStr) || 0;
-    const profundidade = parseFloat(profundidadeStr) || 0;
-    const quantidade = parseInt(quantidadeStr) || 1;
-
-    // Determinar tipo de item baseado em palavras-chave
-    const refLower = referencia.toLowerCase();
-    const descLower = descricao.toLowerCase();
-    const isFerrragem = 
-      refLower.includes('ferr') || 
-      refLower.includes('pux') || 
-      refLower.includes('dob') ||
-      refLower.includes('corr') ||
-      descLower.includes('ferragem') ||
-      descLower.includes('puxador') ||
-      descLower.includes('dobradiça');
-
+    // Extrair atributos do ITEM
+    const descricao = extractAttribute(itemAttributes, 'DESCRIPTION');
+    const referencia = extractAttribute(itemAttributes, 'REFERENCE');
+    const widthStr = extractAttribute(itemAttributes, 'WIDTH');
+    const heightStr = extractAttribute(itemAttributes, 'HEIGHT');
+    const depthStr = extractAttribute(itemAttributes, 'DEPTH');
+    const quantityStr = extractAttribute(itemAttributes, 'QUANTITY');
+    const repetitionStr = extractAttribute(itemAttributes, 'REPETITION');
+    const unit = extractAttribute(itemAttributes, 'UNIT');
+    
+    // Extrair dados de REFERENCES
+    const material = extractNestedValue(itemContent, 'MATERIAL');
+    const thickness = extractNestedValue(itemContent, 'THICKNESS');
+    const model = extractNestedValue(itemContent, 'MODEL');
+    
+    // Converter valores
+    const largura = parseFloat(widthStr) || 0;
+    const altura = parseFloat(heightStr) || 0;
+    const profundidade = parseFloat(depthStr) || 0;
+    const quantidade = parseInt(quantityStr) || parseInt(repetitionStr) || 1;
+    
+    // Determinar tipo de item baseado na unidade
+    const isChapa = unit === 'M2' || unit === 'M²';
+    const tipo_item = isChapa ? 'chapa' : 'ferragem';
+    
+    // Calcular área se for chapa
+    let area_m2 = null;
+    if (isChapa && largura > 0 && profundidade > 0) {
+      area_m2 = (largura / 1000) * (profundidade / 1000);
+    }
+    
     items.push({
-      referencia,
-      descricao,
+      referencia: referencia || 'SEM REF',
+      descricao: descricao || 'Item',
       largura_mm: largura,
       altura_mm: altura,
       profundidade_mm: profundidade,
       quantidade,
       material: material || null,
-      modelo: modelo || null,
-      espessura: espessura || null,
-      tipo_item: isFerrragem ? 'ferragem' : 'chapa',
-      area_m2: !isFerrragem && largura > 0 && profundidade > 0 
-        ? (largura / 1000) * (profundidade / 1000) 
-        : null,
+      modelo: model || null,
+      espessura: thickness || null,
+      tipo_item,
+      area_m2,
+      ambiente,
     });
   }
 
@@ -86,6 +138,8 @@ serve(async (req) => {
       throw new Error('promob_file_id é obrigatório');
     }
 
+    console.log('Processando arquivo:', promob_file_id);
+
     // Buscar arquivo do banco
     const { data: fileRecord, error: fileError } = await supabaseClient
       .from('promob_files')
@@ -94,6 +148,8 @@ serve(async (req) => {
       .single();
 
     if (fileError) throw fileError;
+
+    console.log('Arquivo encontrado:', fileRecord.original_filename);
 
     // Download do arquivo XML
     const { data: fileData, error: downloadError } = await supabaseClient
@@ -104,6 +160,15 @@ serve(async (req) => {
     if (downloadError) throw downloadError;
 
     const xmlContent = await fileData.text();
+    console.log('XML carregado, tamanho:', xmlContent.length);
+    
+    // Extrair dados do cliente
+    const customerData = extractCustomerData(xmlContent);
+    console.log('Cliente:', customerData.name);
+    
+    // Extrair ambientes
+    const ambients = extractAmbients(xmlContent);
+    console.log('Ambientes encontrados:', ambients.length);
     
     // Verificar se já existe budget para este projeto
     let budgetId: string;
@@ -116,6 +181,7 @@ serve(async (req) => {
 
     if (existingBudget) {
       budgetId = existingBudget.id;
+      console.log('Budget existente:', budgetId);
     } else {
       // Criar novo budget
       const { data: newBudget, error: budgetError } = await supabaseClient
@@ -131,45 +197,60 @@ serve(async (req) => {
 
       if (budgetError) throw budgetError;
       budgetId = newBudget.id;
+      console.log('Novo budget criado:', budgetId);
     }
 
-    // Extrair itens do XML
-    const items = extractItems(xmlContent);
-    const budgetItems = items.map(item => ({
-      ...item,
-      budget_id: budgetId,
-      promob_file_id: promob_file_id,
-      ambiente: fileRecord.ambiente,
-    }));
+    // Processar itens de cada ambiente
+    let totalItems = 0;
+    for (const ambiente of ambients) {
+      const items = extractItems(xmlContent, ambiente);
+      console.log(`Ambiente ${ambiente}: ${items.length} itens`);
+      
+      if (items.length > 0) {
+        const budgetItems = items.map(item => ({
+          ...item,
+          budget_id: budgetId,
+          promob_file_id: promob_file_id,
+        }));
 
-    // Inserir itens no banco
-    if (budgetItems.length > 0) {
-      const { error: itemsError } = await supabaseClient
-        .from('budget_items')
-        .insert(budgetItems);
+        // Inserir itens no banco
+        const { error: itemsError } = await supabaseClient
+          .from('budget_items')
+          .insert(budgetItems);
 
-      if (itemsError) throw itemsError;
+        if (itemsError) {
+          console.error('Erro ao inserir itens:', itemsError);
+          throw itemsError;
+        }
 
-      // Calcular custos e preços para cada item
-      for (const item of budgetItems) {
-        await calculateItemPrice(supabaseClient, fileRecord.company_id, item);
+        // Calcular custos e preços para cada item
+        for (const item of budgetItems) {
+          await calculateItemPrice(supabaseClient, fileRecord.company_id, item);
+        }
+        
+        totalItems += items.length;
       }
-
-      // Atualizar totais do budget
-      await updateBudgetTotals(supabaseClient, budgetId);
     }
+
+    // Atualizar totais do budget
+    await updateBudgetTotals(supabaseClient, budgetId);
+    
+    console.log('Processamento concluído:', totalItems, 'itens');
 
     return new Response(
       JSON.stringify({ 
         success: true, 
         budget_id: budgetId,
-        items_count: budgetItems.length 
+        items_count: totalItems,
+        ambients: ambients.length,
+        customer: customerData.name,
       }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
 
   } catch (error: unknown) {
     const errorMessage = error instanceof Error ? error.message : 'Erro desconhecido';
+    console.error('Erro ao processar XML:', errorMessage);
     return new Response(
       JSON.stringify({ error: errorMessage }),
       { 
@@ -190,7 +271,10 @@ async function calculateItemPrice(supabase: any, companyId: string, item: any) {
       .eq('active', true)
       .maybeSingle();
 
-    if (!priceTable) return;
+    if (!priceTable) {
+      console.log('Nenhuma tabela de preços ativa encontrada');
+      return;
+    }
 
     let custoUnitario = 0;
     let semPreco = false;
@@ -218,6 +302,7 @@ async function calculateItemPrice(supabase: any, companyId: string, item: any) {
         custoUnitario = areaComPerda * sheetPrice.preco_m2;
       } else {
         semPreco = true;
+        console.log('Preço não encontrado para chapa:', item.material, item.espessura);
       }
     } else if (item.tipo_item === 'ferragem' && item.referencia) {
       // Buscar preço da ferragem
@@ -232,6 +317,7 @@ async function calculateItemPrice(supabase: any, companyId: string, item: any) {
         custoUnitario = hardwarePrice.preco_unitario;
       } else {
         semPreco = true;
+        console.log('Preço não encontrado para ferragem:', item.referencia);
       }
     }
 
@@ -305,6 +391,8 @@ async function updateBudgetTotals(supabase: any, budgetId: string) {
         total_preco: totalPreco,
       })
       .eq('id', budgetId);
+
+    console.log('Totais atualizados - Custo:', totalCusto, 'Preço:', totalPreco);
 
   } catch (error) {
     console.error('Erro ao atualizar totais do budget:', error);
