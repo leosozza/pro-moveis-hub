@@ -22,7 +22,7 @@ export { useStages } from './useStages';
 export type { UseStagesReturn } from './useStages';
 
 export { useCreateDeal } from './useCreateDeal';
-export type { UseCreateDealReturn } from './useCreateDeal';
+export type { CreateDealData, UseCreateDealReturn } from './useCreateDeal';
 
 export { useCustomers } from './useCustomers';
 export type { UseCustomersReturn } from './useCustomers';

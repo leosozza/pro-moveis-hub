@@ -3,17 +3,22 @@ import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import type { Deal, CreateDealInput } from "./types";
 
+export interface CreateDealData extends CreateDealInput {
+  pipelineId: string;
+  stageId: string;
+}
+
 export interface UseCreateDealReturn {
-  createDeal: (data: CreateDealInput) => Promise<Deal>;
+  createDeal: (data: CreateDealData) => Promise<Deal>;
   isLoading: boolean;
   error: Error | null;
 }
 
-export const useCreateDeal = (pipelineId: string, stageId: string): UseCreateDealReturn => {
+export const useCreateDeal = (): UseCreateDealReturn => {
   const queryClient = useQueryClient();
   
   const mutation = useMutation({
-    mutationFn: async (data: CreateDealInput) => {
+    mutationFn: async ({ pipelineId, stageId, ...data }: CreateDealData) => {
       // Get the user's company_id
       const { data: userData, error: userError } = await supabase.auth.getUser();
       if (userError) throw userError;
@@ -25,6 +30,17 @@ export const useCreateDeal = (pipelineId: string, stageId: string): UseCreateDea
         .single();
       
       if (profileError) throw profileError;
+
+      // Get max position in the stage to place new deal at the end
+      const { data: maxPositionData } = await supabase
+        .from("deals")
+        .select("position")
+        .eq("stage_id", stageId)
+        .order("position", { ascending: false })
+        .limit(1)
+        .single();
+      
+      const nextPosition = (maxPositionData?.position ?? -1) + 1;
       
       const { data: result, error } = await supabase
         .from("deals")
@@ -33,7 +49,7 @@ export const useCreateDeal = (pipelineId: string, stageId: string): UseCreateDea
           pipeline_id: pipelineId,
           stage_id: stageId,
           company_id: profile.company_id,
-          position: 0,
+          position: nextPosition,
         })
         .select()
         .single();
@@ -42,8 +58,8 @@ export const useCreateDeal = (pipelineId: string, stageId: string): UseCreateDea
       
       return result as Deal;
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['deals', pipelineId] });
+    onSuccess: (_, variables) => {
+      queryClient.invalidateQueries({ queryKey: ['deals', variables.pipelineId] });
       toast.success('Deal criado com sucesso!');
     },
     onError: (error: Error) => {
@@ -52,7 +68,7 @@ export const useCreateDeal = (pipelineId: string, stageId: string): UseCreateDea
   });
 
   return {
-    createDeal: (data: CreateDealInput) =>
+    createDeal: (data: CreateDealData) =>
       new Promise((resolve, reject) => {
         mutation.mutate(data, {
           onSuccess: (result) => resolve(result),
