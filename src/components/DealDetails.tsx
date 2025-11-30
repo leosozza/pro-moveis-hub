@@ -1,6 +1,4 @@
 import { useState } from "react";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -11,128 +9,69 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { FileText, MessageSquare, DollarSign, Upload, Loader2, FileUp, Trash2, Image as ImageIcon } from "lucide-react";
 import { toast } from "sonner";
 import { format } from "date-fns";
+import { 
+  useDeal, 
+  useDealInteractions, 
+  useDealAttachments, 
+  useAddDealInteraction, 
+  useUploadDealAttachment, 
+  useDeleteDealAttachment 
+} from "@/modules/crm";
 
 interface DealDetailsProps {
   dealId: string;
 }
 
 export const DealDetails = ({ dealId }: DealDetailsProps) => {
-  const queryClient = useQueryClient();
   const [newInteraction, setNewInteraction] = useState({ type: "", content: "" });
   const [uploadingFile, setUploadingFile] = useState(false);
 
-  const { data: deal } = useQuery({
-    queryKey: ["deal", dealId],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from("deals")
-        .select("*")
-        .eq("id", dealId)
-        .single();
-      if (error) throw error;
-      return data;
-    },
-  });
+  // Use CRM hooks
+  const { data: deal } = useDeal(dealId);
+  const { data: attachments } = useDealAttachments(dealId);
+  const { data: interactions } = useDealInteractions(dealId);
+  const addInteraction = useAddDealInteraction(dealId);
+  const uploadAttachment = useUploadDealAttachment(dealId);
+  const deleteAttachment = useDeleteDealAttachment(dealId);
 
-  const { data: attachments } = useQuery({
-    queryKey: ["deal_attachments", dealId],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from("deal_attachments")
-        .select("*")
-        .eq("deal_id", dealId)
-        .order("created_at", { ascending: false });
-      if (error) throw error;
-      return data;
-    },
-  });
-
-  const { data: interactions } = useQuery({
-    queryKey: ["deal_interactions", dealId],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from("deal_interactions")
-        .select(`
-          *,
-          profiles:user_id(full_name)
-        `)
-        .eq("deal_id", dealId)
-        .order("created_at", { ascending: false });
-      if (error) throw error;
-      return data;
-    },
-  });
-
-  const addInteraction = useMutation({
-    mutationFn: async () => {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) throw new Error("Não autenticado");
-
-      const { error } = await supabase.from("deal_interactions").insert([{
-        deal_id: dealId,
-        user_id: user.id,
-        interaction_type: newInteraction.type,
+  const handleAddInteraction = async () => {
+    if (!newInteraction.type || !newInteraction.content) return;
+    
+    try {
+      await addInteraction.mutateAsync({
+        interactionType: newInteraction.type,
         content: newInteraction.content,
-      }]);
-      if (error) throw error;
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["deal_interactions", dealId] });
+      });
       toast.success("Interação registrada!");
       setNewInteraction({ type: "", content: "" });
-    },
-  });
+    } catch (error: unknown) {
+      const errorMessage = error instanceof Error ? error.message : "Erro ao registrar interação";
+      toast.error(errorMessage);
+    }
+  };
 
   const uploadFile = async (file: File, fileType: string) => {
     setUploadingFile(true);
     try {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) throw new Error("Não autenticado");
-
-      const fileExt = file.name.split('.').pop();
-      const fileName = `${dealId}/${Date.now()}.${fileExt}`;
-      
-      const { error: uploadError } = await supabase.storage
-        .from('project-files')
-        .upload(fileName, file);
-
-      if (uploadError) throw uploadError;
-
-      const { data: { publicUrl } } = supabase.storage
-        .from('project-files')
-        .getPublicUrl(fileName);
-
-      const { error: insertError } = await supabase.from("deal_attachments").insert([{
-        deal_id: dealId,
-        file_type: fileType,
-        file_url: publicUrl,
-        original_filename: file.name,
-      }]);
-
-      if (insertError) throw insertError;
-
-      queryClient.invalidateQueries({ queryKey: ["deal_attachments", dealId] });
+      await uploadAttachment.mutateAsync({ file, fileType });
       toast.success("Arquivo enviado com sucesso!");
-    } catch (error: any) {
-      toast.error(error.message || "Erro ao enviar arquivo");
+    } catch (error: unknown) {
+      const errorMessage = error instanceof Error ? error.message : "Erro ao enviar arquivo";
+      toast.error(errorMessage);
     } finally {
       setUploadingFile(false);
     }
   };
 
-  const deleteAttachment = useMutation({
-    mutationFn: async (attachmentId: string) => {
-      const { error } = await supabase
-        .from("deal_attachments")
-        .delete()
-        .eq("id", attachmentId);
-      if (error) throw error;
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["deal_attachments", dealId] });
+  const handleDeleteAttachment = async (attachmentId: string) => {
+    try {
+      await deleteAttachment.mutateAsync(attachmentId);
       toast.success("Arquivo removido!");
-    },
-  });
+    } catch (error: unknown) {
+      const errorMessage = error instanceof Error ? error.message : "Erro ao remover arquivo";
+      toast.error(errorMessage);
+    }
+  };
 
   const formatCurrency = (value: number | null) => {
     if (value === null || value === undefined) return "-";
@@ -177,11 +116,11 @@ export const DealDetails = ({ dealId }: DealDetailsProps) => {
           <CardContent className="space-y-3">
             <div>
               <Label className="text-xs text-muted-foreground">Nome</Label>
-              <p className="text-sm font-medium">{deal?.customer_name || "Não informado"}</p>
+              <p className="text-sm font-medium">{deal?.customerName || "Não informado"}</p>
             </div>
             <div>
               <Label className="text-xs text-muted-foreground">Telefone/WhatsApp</Label>
-              <p className="text-sm">{deal?.customer_phone || "Não informado"}</p>
+              <p className="text-sm">{deal?.customerPhone || "Não informado"}</p>
             </div>
             {deal?.description && (
               <div>
@@ -252,20 +191,20 @@ export const DealDetails = ({ dealId }: DealDetailsProps) => {
               {attachments?.map((att) => (
                 <div key={att.id} className="flex items-center justify-between p-3 border rounded">
                   <div className="flex items-center gap-3">
-                    {getFileIcon(att.file_type)}
+                    {getFileIcon(att.fileType)}
                     <div>
-                      <p className="text-sm font-medium">{att.original_filename}</p>
-                      <p className="text-xs text-muted-foreground capitalize">{att.file_type}</p>
+                      <p className="text-sm font-medium">{att.originalFilename}</p>
+                      <p className="text-xs text-muted-foreground capitalize">{att.fileType}</p>
                     </div>
                   </div>
                   <div className="flex items-center gap-2">
                     <Button size="sm" variant="ghost" asChild>
-                      <a href={att.file_url} target="_blank" rel="noopener noreferrer">Ver</a>
+                      <a href={att.fileUrl} target="_blank" rel="noopener noreferrer">Ver</a>
                     </Button>
                     <Button
                       size="sm"
                       variant="ghost"
-                      onClick={() => deleteAttachment.mutate(att.id)}
+                      onClick={() => handleDeleteAttachment(att.id)}
                     >
                       <Trash2 className="h-4 w-4" />
                     </Button>
@@ -305,7 +244,7 @@ export const DealDetails = ({ dealId }: DealDetailsProps) => {
               </div>
             </div>
             <Button
-              onClick={() => addInteraction.mutate()}
+              onClick={handleAddInteraction}
               disabled={!newInteraction.type || !newInteraction.content || addInteraction.isPending}
             >
               {addInteraction.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
@@ -320,17 +259,17 @@ export const DealDetails = ({ dealId }: DealDetailsProps) => {
           </CardHeader>
           <CardContent>
             <div className="space-y-3">
-              {interactions?.map((int: any) => (
-                <div key={int.id} className="border-l-2 border-primary pl-4 pb-3">
+              {interactions?.map((interaction) => (
+                <div key={interaction.id} className="border-l-2 border-primary pl-4 pb-3">
                   <div className="flex items-center justify-between">
-                    <span className="text-xs font-medium capitalize text-primary">{int.interaction_type}</span>
+                    <span className="text-xs font-medium capitalize text-primary">{interaction.interactionType}</span>
                     <span className="text-xs text-muted-foreground">
-                      {format(new Date(int.created_at), "dd/MM/yyyy HH:mm")}
+                      {format(new Date(interaction.createdAt), "dd/MM/yyyy HH:mm")}
                     </span>
                   </div>
-                  <p className="text-sm mt-1">{int.content}</p>
+                  <p className="text-sm mt-1">{interaction.content}</p>
                   <p className="text-xs text-muted-foreground mt-1">
-                    Por: {int.profiles?.full_name || "Sistema"}
+                    Por: {interaction.user?.fullName || "Sistema"}
                   </p>
                 </div>
               ))}
@@ -354,21 +293,21 @@ export const DealDetails = ({ dealId }: DealDetailsProps) => {
               <div>
                 <Label className="text-xs text-muted-foreground">Valor Estimado</Label>
                 <p className="text-lg font-bold text-primary">
-                  {formatCurrency(deal?.estimated_value)}
+                  {formatCurrency(deal?.estimatedValue ?? null)}
                 </p>
               </div>
               <div>
                 <Label className="text-xs text-muted-foreground">Valor Final</Label>
                 <p className="text-lg font-bold text-green-600">
-                  {formatCurrency(deal?.final_value)}
+                  {formatCurrency(deal?.finalValue ?? null)}
                 </p>
               </div>
             </div>
-            {deal?.expected_close_date && (
+            {deal?.expectedCloseDate && (
               <div>
                 <Label className="text-xs text-muted-foreground">Data Prevista</Label>
                 <p className="text-sm">
-                  {format(new Date(deal.expected_close_date), "dd/MM/yyyy")}
+                  {format(new Date(deal.expectedCloseDate), "dd/MM/yyyy")}
                 </p>
               </div>
             )}
