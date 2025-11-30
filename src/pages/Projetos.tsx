@@ -1,22 +1,25 @@
 import { useState } from "react";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { supabase } from "@/integrations/supabase/client";
+import { useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Plus, Upload, FileText, Loader2, FolderOpen } from "lucide-react";
+import { Plus, Upload, Loader2, FolderOpen } from "lucide-react";
 import { toast } from "sonner";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
+import { useProjects, useCreateProject } from "@/modules/projects";
+import { useCustomersForSelection } from "@/modules/crm/hooks/useCustomers";
+import { xmlService } from "@/modules/projects/services/xml.service";
 
 const Projetos = () => {
   const queryClient = useQueryClient();
   const [openNewProject, setOpenNewProject] = useState(false);
   const [openUploadXML, setOpenUploadXML] = useState(false);
   const [selectedProject, setSelectedProject] = useState<string | null>(null);
+  const [selectedProjectCustomerId, setSelectedProjectCustomerId] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
   
   const [formData, setFormData] = useState({
@@ -25,147 +28,61 @@ const Projetos = () => {
     description: "",
   });
 
-  const { data: customers } = useQuery({
-    queryKey: ["customers"],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from("customers")
-        .select("id, name")
-        .order("name");
-      if (error) throw error;
-      return data;
-    },
-  });
+  // Use hooks
+  const { data: customers } = useCustomersForSelection();
+  const { data: projects, isLoading } = useProjects();
+  const createProject = useCreateProject();
 
-  const { data: projects, isLoading } = useQuery({
-    queryKey: ["projects"],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from("projects")
-        .select(`
-          *,
-          customers:customer_id(name),
-          profiles:projetista_id(full_name)
-        `)
-        .order("created_at", { ascending: false });
-      
-      if (error) throw error;
-      return data;
-    },
-  });
-
-  const createProject = useMutation({
-    mutationFn: async (data: typeof formData) => {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) throw new Error("Usuário não autenticado");
-      
-      const { data: profile } = await supabase
-        .from("profiles")
-        .select("company_id")
-        .eq("id", user.id)
-        .single();
-      
-      if (!profile) throw new Error("Perfil não encontrado");
-      
-      const { error } = await supabase.from("projects").insert([{
-        ...data,
-        company_id: profile.company_id,
-        projetista_id: user.id,
-      }]);
-      if (error) throw error;
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["projects"] });
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    try {
+      await createProject.mutateAsync({
+        name: formData.name,
+        customerId: formData.customer_id,
+        description: formData.description || undefined,
+      });
       toast.success("Projeto criado com sucesso!");
       setOpenNewProject(false);
       setFormData({ name: "", customer_id: "", description: "" });
-    },
-    onError: (error: any) => {
-      toast.error(error.message || "Erro ao criar projeto");
-    },
-  });
-
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    createProject.mutate(formData);
+    } catch (error: unknown) {
+      const errorMessage = error instanceof Error ? error.message : "Erro ao criar projeto";
+      toast.error(errorMessage);
+    }
   };
 
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (!e.target.files || !selectedProject) return;
+    if (!e.target.files || !selectedProject || !selectedProjectCustomerId) return;
 
     setUploading(true);
     const files = Array.from(e.target.files);
     let successCount = 0;
 
     try {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) throw new Error("Usuário não autenticado");
-
-      const { data: profile } = await supabase
-        .from("profiles")
-        .select("company_id")
-        .eq("id", user.id)
-        .single();
-
-      if (!profile) throw new Error("Perfil não encontrado");
-
       for (const file of files) {
         if (!file.name.endsWith('.xml')) {
           toast.error(`${file.name} não é um arquivo XML válido`);
           continue;
         }
 
-        // Extrair ID do cliente e ambiente do nome do arquivo
-        const nameParts = file.name.replace('.xml', '').split('_');
-        if (nameParts.length < 2) {
+        // Validate file name format
+        const validation = xmlService.validateFileName(file.name);
+        if (!validation.isValid) {
           toast.error(`Nome do arquivo ${file.name} inválido. Use formato: idCliente_ambiente.xml`);
           continue;
         }
 
-        const customerId = nameParts[0];
-        const ambiente = nameParts.slice(1).join('_');
-
-        // Upload do arquivo
-        const filePath = `${profile.company_id}/${selectedProject}/${file.name}`;
-        const { error: uploadError } = await supabase.storage
-          .from('project-files')
-          .upload(filePath, file, { upsert: true });
-
-        if (uploadError) throw uploadError;
-
-        // Registrar no banco
-        const { data: promobFile, error: dbError } = await supabase
-          .from('promob_files')
-          .insert([{
-            company_id: profile.company_id,
-            project_id: selectedProject,
-            customer_id: customerId,
-            ambiente: ambiente,
-            file_path: filePath,
-            original_filename: file.name,
-            uploaded_by: user.id,
-          }])
-          .select()
-          .single();
-
-        if (dbError) throw dbError;
-
-        // Processar XML via edge function
         try {
-          const { data: processResult, error: processError } = await supabase.functions.invoke('process-xml', {
-            body: { promob_file_id: promobFile.id }
-          });
-
-          if (processError) {
-            console.error('Erro ao processar XML:', processError);
-            toast.error(`${file.name}: Erro ao processar XML`);
-          } else {
-            successCount++;
-            toast.success(`${file.name}: ${processResult.items_count} itens processados`);
-          }
-        } catch (err) {
-          console.error('Erro ao chamar função:', err);
-          toast.error(`${file.name}: Erro ao processar`);
+          const result = await xmlService.uploadAndProcessXml(
+            file,
+            selectedProject,
+            selectedProjectCustomerId
+          );
+          successCount++;
+          toast.success(`${file.name}: ${result.itemsCount} itens processados`);
+        } catch (err: unknown) {
+          const errorMessage = err instanceof Error ? err.message : "Erro desconhecido";
+          console.error('Erro ao processar XML:', err);
+          toast.error(`${file.name}: ${errorMessage}`);
         }
       }
 
@@ -175,22 +92,23 @@ const Projetos = () => {
       setOpenUploadXML(false);
       queryClient.invalidateQueries({ queryKey: ["projects"] });
       queryClient.invalidateQueries({ queryKey: ["budgets"] });
-    } catch (error: any) {
-      toast.error(error.message || "Erro ao fazer upload");
+    } catch (error: unknown) {
+      const errorMessage = error instanceof Error ? error.message : "Erro ao fazer upload";
+      toast.error(errorMessage);
     } finally {
       setUploading(false);
     }
   };
 
   const getStatusBadge = (status: string) => {
-    const statusMap: Record<string, { label: string; variant: "default" | "secondary" | "success" }> = {
+    const statusMap: Record<string, { label: string; variant: "default" | "secondary" }> = {
       em_elaboracao: { label: "Em Elaboração", variant: "default" },
       aguardando_aprovacao: { label: "Aguardando Aprovação", variant: "secondary" },
-      aprovado: { label: "Aprovado", variant: "success" },
+      aprovado: { label: "Aprovado", variant: "default" },
     };
 
     const statusInfo = statusMap[status] || { label: status, variant: "default" };
-    return <Badge variant={statusInfo.variant as any}>{statusInfo.label}</Badge>;
+    return <Badge variant={statusInfo.variant}>{statusInfo.label}</Badge>;
   };
 
   return (
@@ -321,23 +239,24 @@ const Projetos = () => {
             </CardContent>
           </Card>
         ) : (
-          projects?.map((project: any) => (
+          projects?.map((project) => (
             <Card key={project.id}>
               <CardHeader>
                 <div className="flex items-start justify-between">
                   <div>
                     <CardTitle>{project.name}</CardTitle>
                     <CardDescription>
-                      Cliente: {project.customers?.name} • 
-                      Projetista: {project.profiles?.full_name}
+                      Cliente: {project.customer?.name} • 
+                      Projetista: {project.projetista?.fullName}
                     </CardDescription>
                   </div>
                   <div className="flex items-center gap-2">
-                    {getStatusBadge(project.status)}
+                    {getStatusBadge(project.status || 'em_elaboracao')}
                     <Button
                       size="sm"
                       onClick={() => {
                         setSelectedProject(project.id);
+                        setSelectedProjectCustomerId(project.customerId);
                         setOpenUploadXML(true);
                       }}
                     >

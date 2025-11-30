@@ -1,6 +1,4 @@
 import { useState } from "react";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -12,10 +10,11 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Calendar, Wrench, CheckCircle2, Clock, Loader2, Upload, FileText } from "lucide-react";
 import { toast } from "sonner";
 import { format } from "date-fns";
+import { useAssemblyOrders, useUpdateAssemblyStatus, useCreateInspection } from "@/modules/assembly";
+import type { AssemblyOrder } from "@/modules/assembly";
 
 const Montagem = () => {
-  const queryClient = useQueryClient();
-  const [selectedOrder, setSelectedOrder] = useState<any>(null);
+  const [selectedOrder, setSelectedOrder] = useState<AssemblyOrder | null>(null);
   const [openInspection, setOpenInspection] = useState(false);
   const [inspectionData, setInspectionData] = useState({
     customer_name: "",
@@ -23,52 +22,32 @@ const Montagem = () => {
     observations: "",
   });
 
-  const { data: assemblyOrders, isLoading } = useQuery({
-    queryKey: ["assembly_orders"],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from("assembly_orders")
-        .select(`
-          *,
-          projects:project_id(name, customer_id),
-          deals:deal_id(title),
-          profiles:montador_id(full_name)
-        `)
-        .order("scheduled_date");
-      if (error) throw error;
-      return data;
-    },
-  });
+  // Use Assembly hooks
+  const { data: assemblyOrders, isLoading } = useAssemblyOrders();
+  const updateStatus = useUpdateAssemblyStatus();
+  const createInspection = useCreateInspection();
 
-  const updateStatus = useMutation({
-    mutationFn: async ({ id, status }: { id: string; status: string }) => {
-      const { error } = await supabase
-        .from("assembly_orders")
-        .update({ status })
-        .eq("id", id);
-      if (error) throw error;
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["assembly_orders"] });
+  const handleStatusUpdate = async (orderId: string, status: string) => {
+    try {
+      await updateStatus.mutateAsync({ orderId, status });
       toast.success("Status atualizado!");
-    },
-  });
+    } catch (error: unknown) {
+      const errorMessage = error instanceof Error ? error.message : "Erro ao atualizar status";
+      toast.error(errorMessage);
+    }
+  };
 
-  const createInspection = useMutation({
-    mutationFn: async (data: typeof inspectionData & { assembly_order_id: string }) => {
-      const { error } = await supabase
-        .from("final_inspections")
-        .insert([data]);
-      if (error) throw error;
-
-      // Atualizar status da ordem
-      await supabase
-        .from("assembly_orders")
-        .update({ status: "concluida" })
-        .eq("id", data.assembly_order_id);
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["assembly_orders"] });
+  const handleInspectionSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedOrder) return;
+    
+    try {
+      await createInspection.mutateAsync({
+        assemblyOrderId: selectedOrder.id,
+        customerName: inspectionData.customer_name,
+        approved: inspectionData.approved,
+        observations: inspectionData.observations || undefined,
+      });
       toast.success("Vistoria registrada com sucesso!");
       setOpenInspection(false);
       setSelectedOrder(null);
@@ -77,19 +56,10 @@ const Montagem = () => {
         approved: false,
         observations: "",
       });
-    },
-    onError: (error: any) => {
-      toast.error(error.message || "Erro ao registrar vistoria");
-    },
-  });
-
-  const handleInspectionSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!selectedOrder) return;
-    createInspection.mutate({
-      ...inspectionData,
-      assembly_order_id: selectedOrder.id,
-    });
+    } catch (error: unknown) {
+      const errorMessage = error instanceof Error ? error.message : "Erro ao registrar vistoria";
+      toast.error(errorMessage);
+    }
   };
 
   const getStatusBadge = (status: string) => {
@@ -102,7 +72,7 @@ const Montagem = () => {
     const Icon = config.icon;
     
     return (
-      <Badge variant={config.variant as any} className="gap-1">
+      <Badge variant={config.variant as "default" | "secondary"} className="gap-1">
         <Icon className="h-3 w-3" />
         {config.label}
       </Badge>
@@ -125,15 +95,15 @@ const Montagem = () => {
       </div>
 
       <div className="grid gap-6">
-        {assemblyOrders?.map((order: any) => (
+        {assemblyOrders?.map((order) => (
           <Card key={order.id}>
             <CardHeader>
               <div className="flex items-start justify-between">
                 <div>
-                  <CardTitle>{order.projects?.name}</CardTitle>
+                  <CardTitle>{order.project?.name}</CardTitle>
                   <CardDescription>
-                    {order.deals?.title && `Deal: ${order.deals.title} • `}
-                    Montador: {order.profiles?.full_name || "Não atribuído"}
+                    {order.deal?.title && `Deal: ${order.deal.title} • `}
+                    Montador: {order.montador?.fullName || "Não atribuído"}
                   </CardDescription>
                 </div>
                 {getStatusBadge(order.status)}
@@ -141,23 +111,23 @@ const Montagem = () => {
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="grid grid-cols-2 gap-4 text-sm">
-                {order.scheduled_date && (
+                {order.scheduledDate && (
                   <div className="flex items-center gap-2">
                     <Calendar className="h-4 w-4 text-muted-foreground" />
-                    <span>{format(new Date(order.scheduled_date), "dd/MM/yyyy HH:mm")}</span>
+                    <span>{format(new Date(order.scheduledDate), "dd/MM/yyyy HH:mm")}</span>
                   </div>
                 )}
-                {order.assembly_value && (
+                {order.assemblyValue && (
                   <div className="font-medium text-primary">
-                    Valor: R$ {order.assembly_value.toFixed(2)}
+                    Valor: R$ {order.assemblyValue.toFixed(2)}
                   </div>
                 )}
               </div>
 
-              {order.material_request && (
+              {order.materialRequest && (
                 <div className="p-3 bg-muted rounded-lg">
                   <h4 className="font-medium text-sm mb-1">Solicitação de Material</h4>
-                  <p className="text-sm text-muted-foreground">{order.material_request}</p>
+                  <p className="text-sm text-muted-foreground">{order.materialRequest}</p>
                 </div>
               )}
 
@@ -172,7 +142,7 @@ const Montagem = () => {
                 {order.status === "agendada" && (
                   <Button
                     size="sm"
-                    onClick={() => updateStatus.mutate({ id: order.id, status: "em_andamento" })}
+                    onClick={() => handleStatusUpdate(order.id, "em_andamento")}
                   >
                     Iniciar Montagem
                   </Button>
