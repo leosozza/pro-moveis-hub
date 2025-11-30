@@ -1,64 +1,23 @@
 import { useState } from "react";
-import { useQuery } from "@tanstack/react-query";
-import { supabase } from "@/integrations/supabase/client";
+import { usePipelineByType } from "@/modules/crm/hooks/usePipelines";
+import { useDeals } from "@/modules/crm/hooks/useDeals";
+import { useMoveDeal } from "@/modules/crm/hooks/useMoveDeal";
 import { KanbanBoard } from "@/components/KanbanBoard";
 import { Loader2 } from "lucide-react";
-
-interface Deal {
-  id: string;
-  title: string;
-  stage_id: string;
-  position: number;
-  customers?: { name: string } | null;
-  projects?: { name: string } | null;
-  profiles?: { full_name: string } | null;
-}
+import type { Deal } from "@/modules/crm/types/crm.types";
 
 const PosVenda = () => {
   const [selectedDeal, setSelectedDeal] = useState<Deal | null>(null);
 
-  const { data: pipeline } = useQuery({
-    queryKey: ["pos_venda_pipeline"],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from("pipelines")
-        .select("*, stages(*)")
-        .eq("type", "pos_venda")
-        .order("created_at", { ascending: true })
-        .limit(1);
-      if (error) throw error;
-      
-      const pipelineData = data?.[0] || null;
-      
-      // Ordenar stages por position
-      if (pipelineData?.stages) {
-        pipelineData.stages = pipelineData.stages.sort((a: { position: number }, b: { position: number }) => a.position - b.position);
-      }
-      
-      return pipelineData;
-    },
-  });
+  const { pipeline, isLoading: pipelineLoading } = usePipelineByType('pos_venda');
+  const { deals, isLoading: dealsLoading } = useDeals(pipeline?.id);
+  const { moveDeal, isLoading: movingDeal } = useMoveDeal();
 
-  const { data: deals, isLoading } = useQuery({
-    queryKey: ["pos_venda_deals"],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from("deals")
-        .select(`
-          *,
-          customers:customer_id(name),
-          projects:project_id(name),
-          profiles:responsible_id(full_name)
-        `)
-        .eq("pipeline_id", pipeline?.id)
-        .order("position");
-      if (error) throw error;
-      return data;
-    },
-    enabled: !!pipeline?.id,
-  });
+  const handleCardMove = async (cardId: string, newStageId: string) => {
+    await moveDeal(cardId, newStageId);
+  };
 
-  if (isLoading) {
+  if (pipelineLoading || dealsLoading) {
     return (
       <div className="p-8 flex justify-center">
         <Loader2 className="h-8 w-8 animate-spin" />
@@ -78,10 +37,11 @@ const PosVenda = () => {
       {pipeline && (
         <KanbanBoard
           stages={pipeline.stages || []}
-          cards={deals || []}
+          cards={deals}
           onCardClick={setSelectedDeal}
           onAddCard={() => {}}
-          tableName="deals"
+          onCardMove={handleCardMove}
+          isMoving={movingDeal}
         />
       )}
     </div>

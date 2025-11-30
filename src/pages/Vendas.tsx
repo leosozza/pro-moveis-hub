@@ -1,6 +1,8 @@
 import { useState } from "react";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { supabase } from "@/integrations/supabase/client";
+import { useQueryClient } from "@tanstack/react-query";
+import { usePipelineByType } from "@/modules/crm/hooks/usePipelines";
+import { useDeals } from "@/modules/crm/hooks/useDeals";
+import { useMoveDeal } from "@/modules/crm/hooks/useMoveDeal";
 import { KanbanBoard } from "@/components/KanbanBoard";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
@@ -17,44 +19,9 @@ const Vendas = () => {
   const [selectedStageId, setSelectedStageId] = useState<string>("");
   const [selectedDeal, setSelectedDeal] = useState<{ id: string; title: string; customer_name?: string } | null>(null);
 
-  const { data: pipeline } = useQuery({
-    queryKey: ["vendas_pipeline"],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from("pipelines")
-        .select("*, stages(*)")
-        .eq("type", "vendas")
-        .order("created_at", { ascending: true })
-        .limit(1);
-      if (error) throw error;
-      
-      const pipelineData = data?.[0] || null;
-      
-      // Ordenar stages por position
-      if (pipelineData?.stages) {
-        pipelineData.stages = pipelineData.stages.sort((a: { position: number }, b: { position: number }) => a.position - b.position);
-      }
-      
-      return pipelineData;
-    },
-  });
-
-  const { data: deals, isLoading } = useQuery({
-    queryKey: ["deals"],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from("deals")
-        .select("*")
-        .eq("pipeline_id", pipeline?.id)
-        .order("position");
-      if (error) throw error;
-      return data?.map(d => ({
-        ...d,
-        customers: d.customer_name ? { name: d.customer_name } : null,
-      }));
-    },
-    enabled: !!pipeline?.id,
-  });
+  const { pipeline, isLoading: pipelineLoading } = usePipelineByType('vendas');
+  const { deals, isLoading: dealsLoading } = useDeals(pipeline?.id);
+  const { moveDeal, isLoading: movingDeal } = useMoveDeal();
 
   const handleAddCard = (stageId: string) => {
     setSelectedStageId(stageId);
@@ -66,7 +33,17 @@ const Vendas = () => {
     setOpenDealDetails(true);
   };
 
-  if (isLoading) {
+  const handleCardMove = async (cardId: string, newStageId: string) => {
+    await moveDeal(cardId, newStageId);
+  };
+
+  // Map deals to include customers property for KanbanBoard compatibility
+  const mappedDeals = deals.map(d => ({
+    ...d,
+    customers: d.customer_name ? { name: d.customer_name } : d.customers,
+  }));
+
+  if (pipelineLoading || dealsLoading) {
     return (
       <div className="p-8 flex justify-center">
         <Loader2 className="h-8 w-8 animate-spin" />
@@ -116,7 +93,7 @@ const Vendas = () => {
             pipelineId={pipeline.id}
             pipelineName={pipeline.name || "Vendas"}
             onSuccess={() => {
-              queryClient.invalidateQueries({ queryKey: ["vendas_pipeline"] });
+              queryClient.invalidateQueries({ queryKey: ["pipeline", "vendas"] });
             }}
           />
         )}
@@ -139,10 +116,11 @@ const Vendas = () => {
 
       <KanbanBoard
         stages={pipeline.stages}
-        cards={deals || []}
+        cards={mappedDeals}
         onCardClick={handleCardClick}
         onAddCard={handleAddCard}
-        tableName="deals"
+        onCardMove={handleCardMove}
+        isMoving={movingDeal}
       />
 
       <Dialog open={openNewDeal} onOpenChange={setOpenNewDeal}>
@@ -186,7 +164,7 @@ const Vendas = () => {
         pipelineId={pipeline.id}
         pipelineName={pipeline.name || "Vendas"}
         onSuccess={() => {
-          queryClient.invalidateQueries({ queryKey: ["vendas_pipeline"] });
+          queryClient.invalidateQueries({ queryKey: ["pipeline", "vendas"] });
         }}
       />
     </div>

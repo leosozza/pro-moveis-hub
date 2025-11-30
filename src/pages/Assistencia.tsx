@@ -1,5 +1,9 @@
 import { useState } from "react";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQueryClient, useQuery } from "@tanstack/react-query";
+import { usePipelineByType } from "@/modules/crm/hooks/usePipelines";
+import { useServiceTickets } from "@/modules/support/hooks/useServiceTickets";
+import { useMoveTicket } from "@/modules/support/hooks/useMoveTicket";
+import { createTicket } from "@/modules/support/services/support.service";
 import { supabase } from "@/integrations/supabase/client";
 import { KanbanBoard } from "@/components/KanbanBoard";
 import { Button } from "@/components/ui/button";
@@ -10,71 +14,24 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Loader2 } from "lucide-react";
 import { toast } from "sonner";
-
-interface Ticket {
-  id: string;
-  title: string;
-  stage_id: string;
-  position: number;
-  priority?: string;
-  customers?: { name: string } | null;
-  projects?: { name: string } | null;
-  profiles?: { full_name: string } | null;
-}
+import type { ServiceTicket, TicketPriority } from "@/modules/support/types/support.types";
 
 const Assistencia = () => {
   const queryClient = useQueryClient();
   const [openNewTicket, setOpenNewTicket] = useState(false);
   const [selectedStageId, setSelectedStageId] = useState<string>("");
-  const [selectedTicket, setSelectedTicket] = useState<Ticket | null>(null);
+  const [selectedTicket, setSelectedTicket] = useState<ServiceTicket | null>(null);
   const [formData, setFormData] = useState({
     title: "",
     description: "",
     customer_id: "",
     project_id: "",
-    priority: "media",
+    priority: "media" as TicketPriority,
   });
 
-  const { data: pipeline } = useQuery({
-    queryKey: ["assistencia_pipeline"],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from("pipelines")
-        .select("*, stages(*)")
-        .eq("type", "assistencia")
-        .order("created_at", { ascending: true })
-        .limit(1);
-      if (error) throw error;
-      
-      const pipelineData = data?.[0] || null;
-      
-      // Ordenar stages por position
-      if (pipelineData?.stages) {
-        pipelineData.stages = pipelineData.stages.sort((a: { position: number }, b: { position: number }) => a.position - b.position);
-      }
-      
-      return pipelineData;
-    },
-  });
-
-  const { data: tickets, isLoading } = useQuery({
-    queryKey: ["service_tickets"],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from("service_tickets")
-        .select(`
-          *,
-          customers:customer_id(name),
-          projects:project_id(name),
-          profiles:responsible_id(full_name)
-        `)
-        .eq("pipeline_id", pipeline?.id)
-        .order("position");
-      if (error) throw error;
-      return data;
-    },
-    enabled: !!pipeline?.id,
-  });
+  const { pipeline, isLoading: pipelineLoading } = usePipelineByType('assistencia');
+  const { tickets, isLoading: ticketsLoading } = useServiceTickets(pipeline?.id);
+  const { moveTicket, isLoading: movingTicket } = useMoveTicket();
 
   const { data: customers } = useQuery({
     queryKey: ["customers"],
@@ -100,24 +57,13 @@ const Assistencia = () => {
     },
   });
 
-  const createTicket = useMutation({
+  const createTicketMutation = useMutation({
     mutationFn: async (data: typeof formData & { stage_id: string }) => {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) throw new Error("Não autenticado");
-      
-      const { data: profile } = await supabase
-        .from("profiles")
-        .select("company_id")
-        .eq("id", user.id)
-        .single();
-      
-      const { error } = await supabase.from("service_tickets").insert([{
+      if (!pipeline?.id) throw new Error("Pipeline não encontrado");
+      return createTicket({
         ...data,
-        company_id: profile?.company_id,
-        pipeline_id: pipeline?.id,
-        responsible_id: user.id,
-      }]);
-      if (error) throw error;
+        pipeline_id: pipeline.id,
+      });
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["service_tickets"] });
@@ -131,7 +77,7 @@ const Assistencia = () => {
         priority: "media",
       });
     },
-    onError: (error: any) => {
+    onError: (error: Error) => {
       toast.error(error.message || "Erro ao criar chamado");
     },
   });
@@ -142,7 +88,7 @@ const Assistencia = () => {
       toast.error("Selecione um estágio");
       return;
     }
-    createTicket.mutate({ ...formData, stage_id: selectedStageId });
+    createTicketMutation.mutate({ ...formData, stage_id: selectedStageId });
   };
 
   const handleAddCard = (stageId: string) => {
@@ -150,7 +96,22 @@ const Assistencia = () => {
     setOpenNewTicket(true);
   };
 
-  if (isLoading) {
+  const handleCardMove = async (cardId: string, newStageId: string) => {
+    await moveTicket(cardId, newStageId);
+  };
+
+  // Map tickets to KanbanCard format
+  const kanbanCards = tickets.map(ticket => ({
+    id: ticket.id,
+    title: ticket.title,
+    description: ticket.description,
+    stage_id: ticket.stage_id,
+    position: ticket.position,
+    customers: ticket.customers,
+    priority: ticket.priority || undefined,
+  }));
+
+  if (pipelineLoading || ticketsLoading) {
     return (
       <div className="p-8 flex justify-center">
         <Loader2 className="h-8 w-8 animate-spin" />
@@ -168,10 +129,11 @@ const Assistencia = () => {
       {pipeline && (
         <KanbanBoard
           stages={pipeline.stages || []}
-          cards={tickets || []}
-          onCardClick={setSelectedTicket}
+          cards={kanbanCards}
+          onCardClick={(card) => setSelectedTicket(tickets.find(t => t.id === card.id) || null)}
           onAddCard={handleAddCard}
-          tableName="service_tickets"
+          onCardMove={handleCardMove}
+          isMoving={movingTicket}
         />
       )}
 
@@ -253,8 +215,8 @@ const Assistencia = () => {
               <Button type="button" variant="outline" onClick={() => setOpenNewTicket(false)}>
                 Cancelar
               </Button>
-              <Button type="submit" disabled={createTicket.isPending}>
-                {createTicket.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+              <Button type="submit" disabled={createTicketMutation.isPending}>
+                {createTicketMutation.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                 Criar
               </Button>
             </div>

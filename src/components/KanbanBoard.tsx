@@ -1,62 +1,41 @@
 import { useState } from "react";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { GripVertical, Plus } from "lucide-react";
-import { toast } from "sonner";
 
 interface Stage {
   id: string;
   name: string;
   position: number;
-  color: string;
+  color: string | null;
 }
 
-interface Card {
+interface KanbanCard {
   id: string;
   title: string;
   description?: string | null;
   stage_id: string;
   position: number;
-  customers?: { name: string };
+  customers?: { name: string } | null;
   estimated_value?: number | null;
   priority?: string;
 }
 
 interface KanbanBoardProps {
   stages: Stage[];
-  cards: Card[];
-  onCardClick: (card: Card) => void;
+  cards: KanbanCard[];
+  onCardClick: (card: KanbanCard) => void;
   onAddCard: (stageId: string) => void;
-  tableName: "deals" | "service_tickets";
+  onCardMove: (cardId: string, newStageId: string) => Promise<void>;
+  isMoving?: boolean;
 }
 
-export const KanbanBoard = ({ stages, cards, onCardClick, onAddCard, tableName }: KanbanBoardProps) => {
-  const queryClient = useQueryClient();
-  const [draggedCard, setDraggedCard] = useState<Card | null>(null);
+export const KanbanBoard = ({ stages, cards, onCardClick, onAddCard, onCardMove, isMoving }: KanbanBoardProps) => {
+  const [draggedCard, setDraggedCard] = useState<KanbanCard | null>(null);
 
-  const moveCard = useMutation({
-    mutationFn: async ({ cardId, newStageId }: { cardId: string; newStageId: string }) => {
-      const { error } = await supabase
-        .from(tableName)
-        .update({ stage_id: newStageId })
-        .eq("id", cardId);
-      
-      if (error) throw error;
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: [tableName] });
-      toast.success("Card movido com sucesso!");
-    },
-    onError: (error: any) => {
-      toast.error(error.message || "Erro ao mover card");
-    },
-  });
-
-  const handleDragStart = (card: Card) => {
+  const handleDragStart = (card: KanbanCard) => {
     setDraggedCard(card);
   };
 
@@ -64,9 +43,9 @@ export const KanbanBoard = ({ stages, cards, onCardClick, onAddCard, tableName }
     e.preventDefault();
   };
 
-  const handleDrop = (stageId: string) => {
-    if (draggedCard && draggedCard.stage_id !== stageId) {
-      moveCard.mutate({ cardId: draggedCard.id, newStageId: stageId });
+  const handleDrop = async (stageId: string) => {
+    if (draggedCard && draggedCard.stage_id !== stageId && !isMoving) {
+      await onCardMove(draggedCard.id, stageId);
     }
     setDraggedCard(null);
   };
@@ -78,7 +57,7 @@ export const KanbanBoard = ({ stages, cards, onCardClick, onAddCard, tableName }
     }).format(value);
   };
 
-  const getPriorityColor = (priority?: string) => {
+  const getPriorityColor = (priority?: string): "default" | "secondary" | "destructive" | "outline" => {
     switch (priority) {
       case 'urgente': return 'destructive';
       case 'alta': return 'default';
@@ -151,7 +130,7 @@ export const KanbanBoard = ({ stages, cards, onCardClick, onAddCard, tableName }
                             </div>
                           )}
                           {card.priority && (
-                            <Badge variant={getPriorityColor(card.priority) as any} className="text-xs">
+                            <Badge variant={getPriorityColor(card.priority)} className="text-xs">
                               {card.priority}
                             </Badge>
                           )}
