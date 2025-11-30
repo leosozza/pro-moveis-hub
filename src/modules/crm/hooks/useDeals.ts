@@ -1,28 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
-
-export interface Deal {
-  id: string;
-  title: string;
-  description?: string | null;
-  stage_id: string;
-  pipeline_id: string;
-  position: number;
-  customer_id?: string | null;
-  customer_name?: string | null;
-  customer_phone?: string | null;
-  estimated_value?: number | null;
-  final_value?: number | null;
-  expected_close_date?: string | null;
-  actual_close_date?: string | null;
-  status?: string | null;
-  project_id?: string | null;
-  responsible_id?: string | null;
-  company_id: string;
-  created_at: string;
-  updated_at: string;
-  customers?: { name: string } | null;
-}
+import type { Deal } from "./types";
 
 export interface UseDealsReturn {
   deals: Deal[];

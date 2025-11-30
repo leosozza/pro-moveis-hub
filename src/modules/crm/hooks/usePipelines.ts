@@ -1,28 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
-
-export type PipelineType = 'vendas' | 'pos_venda' | 'assistencia';
-
-export interface Stage {
-  id: string;
-  name: string;
-  position: number;
-  color: string | null;
-  is_win_stage?: boolean | null;
-  is_loss_stage?: boolean | null;
-  pipeline_id: string;
-  created_at: string;
-}
-
-export interface Pipeline {
-  id: string;
-  name: string;
-  type: string;
-  company_id: string;
-  created_at: string;
-  updated_at: string;
-  stages?: Stage[];
-}
+import type { Pipeline, PipelineType, Stage } from "./types";
 
 export interface UsePipelinesReturn {
   pipelines: Pipeline[];

@@ -1,16 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
-
-export interface Stage {
-  id: string;
-  name: string;
-  position: number;
-  color: string | null;
-  is_win_stage?: boolean | null;
-  is_loss_stage?: boolean | null;
-  pipeline_id: string;
-  created_at: string;
-}
+import type { Stage } from "./types";
 
 export interface UseStagesReturn {
   stages: Stage[];

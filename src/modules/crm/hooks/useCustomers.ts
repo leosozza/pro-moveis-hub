@@ -1,24 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
-
-export interface Customer {
-  id: string;
-  name: string;
-  email?: string | null;
-  phone?: string | null;
-  whatsapp?: string | null;
-  cpf_cnpj?: string | null;
-  address?: string | null;
-  city?: string | null;
-  state?: string | null;
-  zip_code?: string | null;
-  origem?: string | null;
-  observacoes?: string | null;
-  company_id: string;
-  created_by?: string | null;
-  created_at: string;
-  updated_at: string;
-}
+import type { Customer } from "./types";
 
 export interface UseCustomersReturn {
   customers: Customer[];

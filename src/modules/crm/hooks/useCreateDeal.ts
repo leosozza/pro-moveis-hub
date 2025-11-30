@@ -1,17 +1,7 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
-import type { Deal } from "./useDeals";
-
-export interface CreateDealInput {
-  title: string;
-  description?: string;
-  customer_name?: string;
-  customer_phone?: string;
-  customer_id?: string;
-  estimated_value?: number;
-  expected_close_date?: string;
-}
+import type { Deal, CreateDealInput } from "./types";
 
 export interface UseCreateDealReturn {
   createDeal: (data: CreateDealInput) => Promise<Deal>;
