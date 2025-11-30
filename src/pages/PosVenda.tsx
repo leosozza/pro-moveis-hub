@@ -1,21 +1,13 @@
 import { useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
-import { KanbanBoard } from "@/components/KanbanBoard";
+import { KanbanBoard, KanbanCard } from "@/components/KanbanBoard";
 import { Loader2 } from "lucide-react";
-
-interface Deal {
-  id: string;
-  title: string;
-  stage_id: string;
-  position: number;
-  customers?: { name: string } | null;
-  projects?: { name: string } | null;
-  profiles?: { full_name: string } | null;
-}
+import { toast } from "sonner";
 
 const PosVenda = () => {
-  const [selectedDeal, setSelectedDeal] = useState<Deal | null>(null);
+  const queryClient = useQueryClient();
+  const [selectedDeal, setSelectedDeal] = useState<KanbanCard | null>(null);
 
   const { data: pipeline } = useQuery({
     queryKey: ["pos_venda_pipeline"],
@@ -58,6 +50,32 @@ const PosVenda = () => {
     enabled: !!pipeline?.id,
   });
 
+  const moveDealMutation = useMutation({
+    mutationFn: async ({ cardId, newStageId }: { cardId: string; newStageId: string }) => {
+      const { error } = await supabase
+        .from("deals")
+        .update({ stage_id: newStageId })
+        .eq("id", cardId);
+      
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["pos_venda_deals"] });
+      toast.success("Card movido com sucesso!");
+    },
+    onError: (error: Error) => {
+      toast.error(error.message || "Erro ao mover card");
+    },
+  });
+
+  const handleCardMove = async (cardId: string, newStageId: string) => {
+    await moveDealMutation.mutateAsync({ cardId, newStageId });
+  };
+
+  const handleCardClick = (card: KanbanCard) => {
+    setSelectedDeal(card);
+  };
+
   if (isLoading) {
     return (
       <div className="p-8 flex justify-center">
@@ -79,9 +97,9 @@ const PosVenda = () => {
         <KanbanBoard
           stages={pipeline.stages || []}
           cards={deals || []}
-          onCardClick={setSelectedDeal}
-          onAddCard={() => {}}
-          tableName="deals"
+          onCardClick={handleCardClick}
+          onCardMove={handleCardMove}
+          isMoving={moveDealMutation.isPending}
         />
       )}
     </div>
