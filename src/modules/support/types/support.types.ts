@@ -34,6 +34,17 @@ export interface TicketKanbanCard {
   priority?: string;
 }
 
+// Legacy card format for backward compatibility with KanbanBoard (snake_case)
+export interface LegacyTicketCard {
+  id: string;
+  title: string;
+  description?: string | null;
+  stage_id: string;
+  position: number;
+  customers?: { name: string } | null;
+  priority?: string;
+}
+
 // Input types for creating/updating
 export interface CreateTicketInput {
   title: string;

@@ -63,16 +63,16 @@ const Montagem = () => {
   };
 
   const getStatusBadge = (status: string) => {
-    const statusMap = {
+    const statusMap: Record<string, { label: string; variant: "default" | "secondary" | "destructive" | "outline"; icon: typeof Clock }> = {
       agendada: { label: "Agendada", variant: "secondary", icon: Clock },
       em_andamento: { label: "Em Andamento", variant: "default", icon: Wrench },
-      concluida: { label: "Concluída", variant: "success", icon: CheckCircle2 },
+      concluida: { label: "Concluída", variant: "default", icon: CheckCircle2 },
     };
-    const config = statusMap[status as keyof typeof statusMap] || statusMap.agendada;
+    const config = statusMap[status] || statusMap.agendada;
     const Icon = config.icon;
     
     return (
-      <Badge variant={config.variant as "default" | "secondary"} className="gap-1">
+      <Badge variant={config.variant} className={status === 'concluida' ? 'gap-1 bg-green-600 hover:bg-green-700' : 'gap-1'}>
         <Icon className="h-3 w-3" />
         {config.label}
       </Badge>

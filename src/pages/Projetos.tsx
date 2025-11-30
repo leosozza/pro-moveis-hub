@@ -101,14 +101,21 @@ const Projetos = () => {
   };
 
   const getStatusBadge = (status: string) => {
-    const statusMap: Record<string, { label: string; variant: "default" | "secondary" }> = {
+    const statusMap: Record<string, { label: string; variant: "default" | "secondary"; isApproved?: boolean }> = {
       em_elaboracao: { label: "Em Elaboração", variant: "default" },
       aguardando_aprovacao: { label: "Aguardando Aprovação", variant: "secondary" },
-      aprovado: { label: "Aprovado", variant: "default" },
+      aprovado: { label: "Aprovado", variant: "default", isApproved: true },
     };
 
     const statusInfo = statusMap[status] || { label: status, variant: "default" };
-    return <Badge variant={statusInfo.variant}>{statusInfo.label}</Badge>;
+    return (
+      <Badge 
+        variant={statusInfo.variant}
+        className={statusInfo.isApproved ? 'bg-green-600 hover:bg-green-700' : undefined}
+      >
+        {statusInfo.label}
+      </Badge>
+    );
   };
 
   return (

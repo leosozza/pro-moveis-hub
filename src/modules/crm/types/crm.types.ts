@@ -102,6 +102,27 @@ export interface KanbanCard {
   priority?: string;
 }
 
+// Legacy card format for backward compatibility with KanbanBoard (snake_case)
+export interface LegacyKanbanCard {
+  id: string;
+  title: string;
+  description?: string | null;
+  stage_id: string;
+  position: number;
+  customers?: { name: string } | null;
+  estimated_value?: number | null;
+  priority?: string;
+  customer_name?: string | null;
+}
+
+// Legacy stage format for backward compatibility with KanbanBoard
+export interface LegacyStage {
+  id: string;
+  name: string;
+  position: number;
+  color: string;
+}
+
 // Input types for creating/updating
 export interface CreateDealInput {
   title: string;

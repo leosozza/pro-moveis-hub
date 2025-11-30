@@ -11,7 +11,9 @@ import type {
   Customer, 
   DealInteraction, 
   DealAttachment,
-  KanbanCard 
+  KanbanCard,
+  LegacyKanbanCard,
+  LegacyStage,
 } from '../types/crm.types';
 
 // Stage adapters
@@ -139,17 +141,7 @@ export const mapDealAttachmentRowToAttachment = (
 });
 
 // Adapter for legacy KanbanBoard format (maps back to snake_case for compatibility)
-export const mapDealToLegacyCard = (deal: Deal): {
-  id: string;
-  title: string;
-  description?: string | null;
-  stage_id: string;
-  position: number;
-  customers?: { name: string } | null;
-  estimated_value?: number | null;
-  priority?: string;
-  customer_name?: string | null;
-} => ({
+export const mapDealToLegacyCard = (deal: Deal): LegacyKanbanCard => ({
   id: deal.id,
   title: deal.title,
   description: deal.description,
@@ -161,12 +153,7 @@ export const mapDealToLegacyCard = (deal: Deal): {
 });
 
 // Map Stage to legacy format for KanbanBoard compatibility
-export const mapStageToLegacy = (stage: Stage): {
-  id: string;
-  name: string;
-  position: number;
-  color: string;
-} => ({
+export const mapStageToLegacy = (stage: Stage): LegacyStage => ({
   id: stage.id,
   name: stage.name,
   position: stage.position,

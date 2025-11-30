@@ -4,7 +4,7 @@
  */
 
 import type { Tables } from '@/integrations/supabase/types';
-import type { ServiceTicket, TicketKanbanCard } from '../types/support.types';
+import type { ServiceTicket, TicketKanbanCard, LegacyTicketCard } from '../types/support.types';
 
 type ServiceTicketRowWithRelations = Tables<'service_tickets'> & {
   customers?: { name: string } | null;
@@ -42,15 +42,7 @@ export const mapTicketToKanbanCard = (ticket: ServiceTicket): TicketKanbanCard =
 });
 
 // Adapter for legacy KanbanBoard format (maps back to snake_case for compatibility)
-export const mapTicketToLegacyCard = (ticket: ServiceTicket): {
-  id: string;
-  title: string;
-  description?: string | null;
-  stage_id: string;
-  position: number;
-  customers?: { name: string } | null;
-  priority?: string;
-} => ({
+export const mapTicketToLegacyCard = (ticket: ServiceTicket): LegacyTicketCard => ({
   id: ticket.id,
   title: ticket.title,
   description: ticket.description,

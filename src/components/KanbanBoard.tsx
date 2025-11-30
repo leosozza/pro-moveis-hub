@@ -63,7 +63,7 @@ export const KanbanBoard = ({ stages, cards, onCardClick, onAddCard, onCardMove 
     }).format(value);
   };
 
-  const getPriorityColor = (priority?: string) => {
+  const getPriorityColor = (priority?: string): "default" | "secondary" | "destructive" | "outline" => {
     switch (priority) {
       case 'urgente': return 'destructive';
       case 'alta': return 'default';
@@ -136,7 +136,7 @@ export const KanbanBoard = ({ stages, cards, onCardClick, onAddCard, onCardMove 
                             </div>
                           )}
                           {card.priority && (
-                            <Badge variant={getPriorityColor(card.priority) as any} className="text-xs">
+                            <Badge variant={getPriorityColor(card.priority)} className="text-xs">
                               {card.priority}
                             </Badge>
                           )}
