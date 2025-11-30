@@ -4,8 +4,18 @@ import { supabase } from "@/integrations/supabase/client";
 import { KanbanBoard } from "@/components/KanbanBoard";
 import { Loader2 } from "lucide-react";
 
+interface Deal {
+  id: string;
+  title: string;
+  stage_id: string;
+  position: number;
+  customers?: { name: string } | null;
+  projects?: { name: string } | null;
+  profiles?: { full_name: string } | null;
+}
+
 const PosVenda = () => {
-  const [selectedDeal, setSelectedDeal] = useState<any>(null);
+  const [selectedDeal, setSelectedDeal] = useState<Deal | null>(null);
 
   const { data: pipeline } = useQuery({
     queryKey: ["pos_venda_pipeline"],
@@ -14,9 +24,18 @@ const PosVenda = () => {
         .from("pipelines")
         .select("*, stages(*)")
         .eq("type", "pos_venda")
-        .single();
+        .order("created_at", { ascending: true })
+        .limit(1);
       if (error) throw error;
-      return data;
+      
+      const pipelineData = data?.[0] || null;
+      
+      // Ordenar stages por position
+      if (pipelineData?.stages) {
+        pipelineData.stages = pipelineData.stages.sort((a: { position: number }, b: { position: number }) => a.position - b.position);
+      }
+      
+      return pipelineData;
     },
   });
 

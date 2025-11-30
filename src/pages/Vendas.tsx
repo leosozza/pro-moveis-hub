@@ -3,16 +3,19 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { KanbanBoard } from "@/components/KanbanBoard";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Loader2 } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Loader2, Settings } from "lucide-react";
 import { DealForm } from "@/components/DealForm";
 import { DealDetails } from "@/components/DealDetails";
+import { StageConfigModal } from "@/components/StageConfigModal";
 
 const Vendas = () => {
   const queryClient = useQueryClient();
   const [openNewDeal, setOpenNewDeal] = useState(false);
   const [openDealDetails, setOpenDealDetails] = useState(false);
+  const [openStageConfig, setOpenStageConfig] = useState(false);
   const [selectedStageId, setSelectedStageId] = useState<string>("");
-  const [selectedDeal, setSelectedDeal] = useState<any>(null);
+  const [selectedDeal, setSelectedDeal] = useState<{ id: string; title: string; customer_name?: string } | null>(null);
 
   const { data: pipeline } = useQuery({
     queryKey: ["vendas_pipeline"],
@@ -21,15 +24,18 @@ const Vendas = () => {
         .from("pipelines")
         .select("*, stages(*)")
         .eq("type", "vendas")
-        .single();
+        .order("created_at", { ascending: true })
+        .limit(1);
       if (error) throw error;
       
+      const pipelineData = data?.[0] || null;
+      
       // Ordenar stages por position
-      if (data?.stages) {
-        data.stages = data.stages.sort((a: any, b: any) => a.position - b.position);
+      if (pipelineData?.stages) {
+        pipelineData.stages = pipelineData.stages.sort((a: { position: number }, b: { position: number }) => a.position - b.position);
       }
       
-      return data;
+      return pipelineData;
     },
   });
 
@@ -55,7 +61,7 @@ const Vendas = () => {
     setOpenNewDeal(true);
   };
 
-  const handleCardClick = (deal: any) => {
+  const handleCardClick = (deal: { id: string; title: string; customer_name?: string }) => {
     setSelectedDeal(deal);
     setOpenDealDetails(true);
   };
@@ -72,27 +78,63 @@ const Vendas = () => {
   if (!pipeline?.id || !pipeline?.stages || pipeline.stages.length === 0) {
     return (
       <div className="p-8">
-        <div className="mb-8">
-          <h1 className="text-3xl font-bold mb-2">Pipeline de Vendas</h1>
-          <p className="text-muted-foreground">Gerencie seus leads e oportunidades de venda</p>
+        <div className="mb-8 flex items-center justify-between">
+          <div>
+            <h1 className="text-3xl font-bold mb-2">Pipeline de Vendas</h1>
+            <p className="text-muted-foreground">Gerencie seus leads e oportunidades de venda</p>
+          </div>
+          {pipeline?.id && (
+            <Button variant="outline" onClick={() => setOpenStageConfig(true)}>
+              <Settings className="h-4 w-4 mr-2" />
+              Configurar Etapas
+            </Button>
+          )}
         </div>
         <div className="flex items-center justify-center h-64 border-2 border-dashed rounded-lg">
           <div className="text-center">
             <p className="text-lg font-medium">Pipeline vazio!</p>
             <p className="text-sm text-muted-foreground mt-2">
-              Configure seu pipeline em Configurações → Pipelines
+              {pipeline?.id 
+                ? "Clique em 'Configurar Etapas' para adicionar etapas ao pipeline."
+                : "Configure seu pipeline em Configurações → Pipelines"
+              }
             </p>
+            {pipeline?.id && (
+              <Button className="mt-4" onClick={() => setOpenStageConfig(true)}>
+                <Settings className="h-4 w-4 mr-2" />
+                Configurar Etapas
+              </Button>
+            )}
           </div>
         </div>
+
+        {/* Modal de Configuração de Etapas */}
+        {pipeline?.id && (
+          <StageConfigModal
+            open={openStageConfig}
+            onOpenChange={setOpenStageConfig}
+            pipelineId={pipeline.id}
+            pipelineName={pipeline.name || "Vendas"}
+            onSuccess={() => {
+              queryClient.invalidateQueries({ queryKey: ["vendas_pipeline"] });
+            }}
+          />
+        )}
       </div>
     );
   }
 
   return (
     <div className="p-8">
-      <div className="mb-8">
-        <h1 className="text-3xl font-bold mb-2">Pipeline de Vendas</h1>
-        <p className="text-muted-foreground">Gerencie seus leads e oportunidades de venda</p>
+      <div className="mb-8 flex items-center justify-between">
+        <div>
+          <h1 className="text-3xl font-bold mb-2">Pipeline de Vendas</h1>
+          <p className="text-muted-foreground">Gerencie seus leads e oportunidades de venda</p>
+        </div>
+        <Button variant="outline" onClick={() => setOpenStageConfig(true)}>
+          <Settings className="h-4 w-4 mr-2" />
+          Configurar Etapas
+        </Button>
       </div>
 
       <KanbanBoard
@@ -136,6 +178,17 @@ const Vendas = () => {
           {selectedDeal && <DealDetails dealId={selectedDeal.id} />}
         </DialogContent>
       </Dialog>
+
+      {/* Modal de Configuração de Etapas */}
+      <StageConfigModal
+        open={openStageConfig}
+        onOpenChange={setOpenStageConfig}
+        pipelineId={pipeline.id}
+        pipelineName={pipeline.name || "Vendas"}
+        onSuccess={() => {
+          queryClient.invalidateQueries({ queryKey: ["vendas_pipeline"] });
+        }}
+      />
     </div>
   );
 };
