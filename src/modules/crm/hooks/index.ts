@@ -16,6 +16,14 @@ export {
   useDeleteDealAttachment,
 } from './useDeals';
 export {
+  useStages,
+  useStage,
+  useCreateStage,
+  useUpdateStage,
+  useDeleteStage,
+  useReorderStages,
+} from './useStages';
+export {
   useCustomers,
   useCustomer,
   useCustomersForSelection,
