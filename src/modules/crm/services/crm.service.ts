@@ -4,6 +4,8 @@
  * Use this as the main entry point for CRM operations.
  */
 
+export { companyService } from './company.service';
+export { usersService } from './users.service';
 export { pipelinesService } from './pipelines.service';
 export { dealsService } from './deals.service';
 export { stagesService } from './stages.service';

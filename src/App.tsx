@@ -15,6 +15,8 @@ import Orcamentos from "./pages/Orcamentos";
 import Montagem from "./pages/Montagem";
 import Assistencia from "./pages/Assistencia";
 import Configuracoes from "./pages/Configuracoes";
+import EmpresaConfig from "./pages/EmpresaConfig";
+import Usuarios from "./pages/Usuarios";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -39,6 +41,8 @@ const App = () => (
               <Route path="/montagem" element={<Montagem />} />
               <Route path="/assistencia" element={<Assistencia />} />
               <Route path="/configuracoes" element={<Configuracoes />} />
+              <Route path="/empresa" element={<EmpresaConfig />} />
+              <Route path="/usuarios" element={<Usuarios />} />
             </Route>
             <Route path="*" element={<NotFound />} />
           </Routes>

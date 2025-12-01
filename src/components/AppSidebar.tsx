@@ -14,6 +14,8 @@ import {
   Package,
   Wrench,
   AlertCircle,
+  Building2,
+  UserCog,
 } from "lucide-react";
 
 import {
@@ -39,6 +41,11 @@ const menuItems = [
   { title: "Orçamentos", url: "/orcamentos", icon: FileText },
   { title: "Montagem", url: "/montagem", icon: Wrench },
   { title: "Assistência", url: "/assistencia", icon: AlertCircle },
+];
+
+const adminItems = [
+  { title: "Empresa", url: "/empresa", icon: Building2 },
+  { title: "Usuários", url: "/usuarios", icon: UserCog },
   { title: "Configurações", url: "/configuracoes", icon: Settings },
 ];
 
@@ -49,7 +56,8 @@ export function AppSidebar() {
   const isCollapsed = state === "collapsed";
 
   const isActive = (path: string) => location.pathname === path;
-  const isExpanded = menuItems.some((item) => isActive(item.url));
+  const allItems = [...menuItems, ...adminItems];
+  const isExpanded = allItems.some((item) => isActive(item.url));
 
   return (
     <Sidebar collapsible="icon" className="border-r">
@@ -68,6 +76,31 @@ export function AppSidebar() {
           <SidebarGroupContent>
             <SidebarMenu>
               {menuItems.map((item) => (
+                <SidebarMenuItem key={item.title}>
+                  <SidebarMenuButton
+                    asChild
+                    isActive={isActive(item.url)}
+                    tooltip={item.title}
+                  >
+                    <NavLink
+                      to={item.url}
+                      className="flex items-center gap-3"
+                    >
+                      <item.icon className="h-4 w-4 shrink-0" />
+                      {!isCollapsed && <span>{item.title}</span>}
+                    </NavLink>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+              ))}
+            </SidebarMenu>
+          </SidebarGroupContent>
+        </SidebarGroup>
+
+        <SidebarGroup>
+          <SidebarGroupLabel>Administração</SidebarGroupLabel>
+          <SidebarGroupContent>
+            <SidebarMenu>
+              {adminItems.map((item) => (
                 <SidebarMenuItem key={item.title}>
                   <SidebarMenuButton
                     asChild
