@@ -45,7 +45,12 @@ export const KanbanBoard = ({ stages, cards, onCardClick, onAddCard, onCardMove,
 
   const handleDrop = async (stageId: string) => {
     if (draggedCard && draggedCard.stage_id !== stageId && !isMoving) {
-      await onCardMove(draggedCard.id, stageId);
+      try {
+        await onCardMove(draggedCard.id, stageId);
+      } catch (error) {
+        // Error is already handled by the hook, but we could add UI feedback here
+        console.error('Failed to move card:', error);
+      }
     }
     setDraggedCard(null);
   };
