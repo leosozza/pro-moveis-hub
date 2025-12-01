@@ -6,6 +6,7 @@
 
 export { pipelinesService } from './pipelines.service';
 export { dealsService } from './deals.service';
+export { stagesService } from './stages.service';
 export { customersService } from './customers.service';
 
 // Re-export types for convenience
