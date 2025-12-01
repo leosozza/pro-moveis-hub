@@ -1,4 +1,7 @@
 import { useState } from "react";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { supabase } from "@/integrations/supabase/client";
+import { KanbanBoard, KanbanCard } from "@/components/KanbanBoard";
 import { useQueryClient } from "@tanstack/react-query";
 import { KanbanBoard } from "@/components/KanbanBoard";
 import { Button } from "@/components/ui/button";
@@ -15,22 +18,11 @@ import { useServiceTickets, useCreateServiceTicket, useMoveTicket } from "@/modu
 import { useCustomersForSelection } from "@/modules/crm/hooks/useCustomers";
 import { useProjectsForSelection } from "@/modules/projects";
 
-interface Ticket {
-  id: string;
-  title: string;
-  stage_id: string;
-  position: number;
-  priority?: string;
-  customers?: { name: string } | null;
-  projects?: { name: string } | null;
-  profiles?: { full_name: string } | null;
-}
-
 const Assistencia = () => {
   const queryClient = useQueryClient();
   const [openNewTicket, setOpenNewTicket] = useState(false);
   const [selectedStageId, setSelectedStageId] = useState<string>("");
-  const [selectedTicket, setSelectedTicket] = useState<Ticket | null>(null);
+  const [selectedTicket, setSelectedTicket] = useState<KanbanCard | null>(null);
   const [formData, setFormData] = useState({
     title: "",
     description: "",
@@ -86,6 +78,39 @@ const Assistencia = () => {
         project_id: "",
         priority: "media",
       });
+    },
+    onError: (error: Error) => {
+      toast.error(error.message || "Erro ao criar chamado");
+    },
+  });
+
+  const moveTicketMutation = useMutation({
+    mutationFn: async ({ cardId, newStageId }: { cardId: string; newStageId: string }) => {
+      const { error } = await supabase
+        .from("service_tickets")
+        .update({ stage_id: newStageId })
+        .eq("id", cardId);
+      
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["service_tickets"] });
+      toast.success("Card movido com sucesso!");
+    },
+    onError: (error: Error) => {
+      toast.error(error.message || "Erro ao mover card");
+    },
+  });
+
+  const handleCardMove = async (cardId: string, newStageId: string) => {
+    await moveTicketMutation.mutateAsync({ cardId, newStageId });
+  };
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedStageId) {
+      toast.error("Selecione um estágio");
+      return;
     } catch (error: unknown) {
       const errorMessage = error instanceof Error ? error.message : "Erro ao criar chamado";
       toast.error(errorMessage);
@@ -95,6 +120,10 @@ const Assistencia = () => {
   const handleAddCard = (stageId: string) => {
     setSelectedStageId(stageId);
     setOpenNewTicket(true);
+  };
+
+  const handleCardClick = (card: KanbanCard) => {
+    setSelectedTicket(card);
   };
 
   if (isLoading) {
@@ -117,6 +146,12 @@ const Assistencia = () => {
 
       {pipeline && (
         <KanbanBoard
+          stages={pipeline.stages || []}
+          cards={tickets || []}
+          onCardClick={handleCardClick}
+          onCardMove={handleCardMove}
+          onAddCard={handleAddCard}
+          isMoving={moveTicketMutation.isPending}
           stages={stagesLegacy}
           cards={ticketsLegacy}
           onCardClick={setSelectedTicket}
