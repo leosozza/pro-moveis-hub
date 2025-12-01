@@ -1,7 +1,4 @@
 import { useState } from "react";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { supabase } from "@/integrations/supabase/client";
-import { KanbanBoard, KanbanCard } from "@/components/KanbanBoard";
 import { useQueryClient } from "@tanstack/react-query";
 import { KanbanBoard } from "@/components/KanbanBoard";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -37,39 +34,13 @@ const Vendas = () => {
     }
   };
 
-  const moveDealMutation = useMutation({
-    mutationFn: async ({ cardId, newStageId }: { cardId: string; newStageId: string }) => {
-      const { error } = await supabase
-        .from("deals")
-        .update({ stage_id: newStageId })
-        .eq("id", cardId);
-      
-      if (error) throw error;
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["deals"] });
-      toast.success("Card movido com sucesso!");
-    },
-    onError: (error: Error) => {
-      toast.error(error.message || "Erro ao mover card");
-    },
-  });
-
-  const handleCardMove = async (cardId: string, newStageId: string) => {
-    await moveDealMutation.mutateAsync({ cardId, newStageId });
-  };
-
   const handleAddCard = (stageId: string) => {
     setSelectedStageId(stageId);
     setOpenNewDeal(true);
   };
 
-  const handleCardClick = (card: KanbanCard) => {
-    setSelectedDeal({
-      id: card.id,
-      title: card.title,
-      customer_name: card.customers?.name,
-    });
+  const handleCardClick = (deal: { id: string; title: string; customer_name?: string }) => {
+    setSelectedDeal(deal);
     setOpenDealDetails(true);
   };
 
@@ -151,9 +122,7 @@ const Vendas = () => {
         stages={stagesLegacy}
         cards={dealsLegacy}
         onCardClick={handleCardClick}
-        onCardMove={handleCardMove}
         onAddCard={handleAddCard}
-        isMoving={moveDealMutation.isPending}
         onCardMove={handleCardMove}
       />
 

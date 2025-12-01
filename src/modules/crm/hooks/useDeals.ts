@@ -1,31 +1,3 @@
-import { useQuery } from "@tanstack/react-query";
-import { supabase } from "@/integrations/supabase/client";
-import type { Deal } from "./types";
-
-export interface UseDealsReturn {
-  deals: Deal[];
-  isLoading: boolean;
-  error: Error | null;
-  refetch: () => void;
-}
-
-export const useDeals = (pipelineId?: string): UseDealsReturn => {
-  const { data, isLoading, error, refetch } = useQuery({
-    queryKey: ['deals', pipelineId],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from("deals")
-        .select("*")
-        .eq("pipeline_id", pipelineId!)
-        .order("position");
-      
-      if (error) throw error;
-      
-      return data?.map(d => ({
-        ...d,
-        customers: d.customer_name ? { name: d.customer_name } : null,
-      })) as Deal[];
-    },
 /**
  * useDeals Hook
  * Custom hook for fetching and managing deals.
@@ -47,12 +19,6 @@ export function useDeals(pipelineId: string | undefined) {
   });
 
   return {
-    deals: data || [],
-    isLoading,
-    error: error as Error | null,
-    refetch,
-  };
-};
     ...query,
     deals: query.data || [],
     // Provide legacy format for backward compatibility with KanbanBoard
