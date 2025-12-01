@@ -1,74 +1,103 @@
 import { useState } from "react";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { GripVertical, Plus } from "lucide-react";
-import { toast } from "sonner";
+import { cn } from "@/lib/utils";
 
-interface Stage {
+// Exported types for reuse
+export interface KanbanStage {
   id: string;
   name: string;
-  position: number;
   color: string;
+  position: number;
 }
 
-interface Card {
+export interface KanbanCard {
+interface KanbanCard {
   id: string;
   title: string;
-  description?: string | null;
   stage_id: string;
+  description?: string | null;
+  priority?: 'baixa' | 'media' | 'alta' | 'urgente';
+  customers?: { name: string } | null;
+  projects?: { name: string } | null;
+  estimated_value?: number | null;
+  [key: string]: unknown;
+}
+
+interface KanbanBoardProps {
+  stages: KanbanStage[];
+  cards: KanbanCard[];
+  onCardClick?: (card: KanbanCard) => void;
+  onCardMove: (cardId: string, newStageId: string) => Promise<void>;
+  onAddCard?: (stageId: string) => void;
+  isMoving?: boolean;
+  renderCardContent?: (card: KanbanCard) => React.ReactNode;
+  className?: string;
+}
+
+export const KanbanBoard = ({
+  stages,
+  cards,
+  onCardClick,
+  onCardMove,
+  onAddCard,
+  isMoving = false,
+  renderCardContent,
+  className,
+}: KanbanBoardProps) => {
+  const [draggedCard, setDraggedCard] = useState<KanbanCard | null>(null);
+  const [isMovingCard, setIsMovingCard] = useState(false);
   position: number;
-  customers?: { name: string };
+  customers?: { name: string } | null;
   estimated_value?: number | null;
   priority?: string;
+  customer_name?: string | null;
 }
 
 interface KanbanBoardProps {
   stages: Stage[];
-  cards: Card[];
-  onCardClick: (card: Card) => void;
+  cards: KanbanCard[];
+  onCardClick: (card: KanbanCard) => void;
   onAddCard: (stageId: string) => void;
-  tableName: "deals" | "service_tickets";
+  onCardMove?: (cardId: string, newStageId: string) => Promise<void>;
 }
 
-export const KanbanBoard = ({ stages, cards, onCardClick, onAddCard, tableName }: KanbanBoardProps) => {
-  const queryClient = useQueryClient();
-  const [draggedCard, setDraggedCard] = useState<Card | null>(null);
+export const KanbanBoard = ({ stages, cards, onCardClick, onAddCard, onCardMove }: KanbanBoardProps) => {
+  const [draggedCard, setDraggedCard] = useState<KanbanCard | null>(null);
+  const [isMoving, setIsMoving] = useState(false);
 
-  const moveCard = useMutation({
-    mutationFn: async ({ cardId, newStageId }: { cardId: string; newStageId: string }) => {
-      const { error } = await supabase
-        .from(tableName)
-        .update({ stage_id: newStageId })
-        .eq("id", cardId);
-      
-      if (error) throw error;
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: [tableName] });
-      toast.success("Card movido com sucesso!");
-    },
-    onError: (error: any) => {
-      toast.error(error.message || "Erro ao mover card");
-    },
-  });
-
-  const handleDragStart = (card: Card) => {
+  const handleDragStart = (card: KanbanCard) => {
     setDraggedCard(card);
   };
 
   const handleDragOver = (e: React.DragEvent) => {
     e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
   };
 
-  const handleDrop = (stageId: string) => {
-    if (draggedCard && draggedCard.stage_id !== stageId) {
-      moveCard.mutate({ cardId: draggedCard.id, newStageId: stageId });
+  const handleDrop = async (stageId: string) => {
+    if (!draggedCard || draggedCard.stage_id === stageId) {
+      setDraggedCard(null);
+      return;
     }
-    setDraggedCard(null);
+
+    setIsMovingCard(true);
+    try {
+      await onCardMove(draggedCard.id, stageId);
+    } finally {
+      setIsMovingCard(false);
+      setDraggedCard(null);
+    if (draggedCard && draggedCard.stage_id !== stageId && onCardMove && !isMoving) {
+      setIsMoving(true);
+      try {
+        await onCardMove(draggedCard.id, stageId);
+      } finally {
+        setIsMoving(false);
+      }
+    }
   };
 
   const formatCurrency = (value: number) => {
@@ -78,7 +107,8 @@ export const KanbanBoard = ({ stages, cards, onCardClick, onAddCard, tableName }
     }).format(value);
   };
 
-  const getPriorityColor = (priority?: string) => {
+  const getPriorityVariant = (priority?: string): "destructive" | "default" | "secondary" | "outline" => {
+  const getPriorityColor = (priority?: string): "default" | "secondary" | "destructive" | "outline" => {
     switch (priority) {
       case 'urgente': return 'destructive';
       case 'alta': return 'default';
@@ -88,8 +118,57 @@ export const KanbanBoard = ({ stages, cards, onCardClick, onAddCard, tableName }
     }
   };
 
+  const renderDefaultCardContent = (card: KanbanCard) => {
+    return (
+      <>
+        <CardHeader className="p-3 space-y-1">
+          <div className="flex items-start justify-between gap-2">
+            <CardTitle className="text-sm font-medium line-clamp-2">
+              {card.title}
+            </CardTitle>
+            <GripVertical className="h-4 w-4 text-muted-foreground flex-shrink-0" />
+          </div>
+          {card.description && (
+            <CardDescription className="text-xs line-clamp-2">
+              {card.description}
+            </CardDescription>
+          )}
+        </CardHeader>
+        <CardContent className="p-3 pt-0 space-y-2">
+          {card.customers?.name && (
+            <div className="text-xs text-muted-foreground">
+              👤 {card.customers.name}
+            </div>
+          )}
+          {card.projects?.name && (
+            <div className="text-xs text-muted-foreground">
+              📁 {card.projects.name}
+            </div>
+          )}
+          {card.estimated_value && (
+            <div className="text-xs font-medium text-primary">
+              {formatCurrency(card.estimated_value)}
+            </div>
+          )}
+          {card.priority && (
+            <Badge variant={getPriorityVariant(card.priority)} className="text-xs">
+              {card.priority}
+            </Badge>
+          )}
+        </CardContent>
+      </>
+    );
+  };
+
+  const renderCard = (card: KanbanCard) => {
+    if (renderCardContent) {
+      return renderCardContent(card);
+    }
+    return renderDefaultCardContent(card);
+  };
+
   return (
-    <div className="flex gap-4 overflow-x-auto pb-4">
+    <div className={cn("flex gap-4 overflow-x-auto pb-4", className)}>
       {stages.map((stage) => {
         const stageCards = cards.filter((card) => card.stage_id === stage.id);
         
@@ -117,15 +196,20 @@ export const KanbanBoard = ({ stages, cards, onCardClick, onAddCard, tableName }
               </CardHeader>
               <CardContent>
                 <ScrollArea className="h-[calc(100vh-300px)]">
-                  <div className="space-y-2">
+                  <div className="space-y-2 pr-4">
                     {stageCards.map((card) => (
                       <Card
                         key={card.id}
-                        className="cursor-move hover:shadow-md transition-shadow"
-                        draggable
+                        className={cn(
+                          "cursor-move hover:shadow-md transition-shadow",
+                          draggedCard?.id === card.id && "opacity-50",
+                          (isMovingCard || isMoving) && "pointer-events-none"
+                        )}
+                        draggable={!isMoving && !isMovingCard}
                         onDragStart={() => handleDragStart(card)}
-                        onClick={() => onCardClick(card)}
+                        onClick={() => onCardClick?.(card)}
                       >
+                        {renderCard(card)}
                         <CardHeader className="p-3 space-y-1">
                           <div className="flex items-start justify-between gap-2">
                             <CardTitle className="text-sm font-medium line-clamp-2">
@@ -151,21 +235,23 @@ export const KanbanBoard = ({ stages, cards, onCardClick, onAddCard, tableName }
                             </div>
                           )}
                           {card.priority && (
-                            <Badge variant={getPriorityColor(card.priority) as any} className="text-xs">
+                            <Badge variant={getPriorityColor(card.priority)} className="text-xs">
                               {card.priority}
                             </Badge>
                           )}
                         </CardContent>
                       </Card>
                     ))}
-                    <Button
-                      variant="ghost"
-                      className="w-full border-2 border-dashed"
-                      onClick={() => onAddCard(stage.id)}
-                    >
-                      <Plus className="h-4 w-4 mr-2" />
-                      Adicionar
-                    </Button>
+                    {onAddCard && (
+                      <Button
+                        variant="ghost"
+                        className="w-full border-2 border-dashed"
+                        onClick={() => onAddCard(stage.id)}
+                      >
+                        <Plus className="h-4 w-4 mr-2" />
+                        Adicionar
+                      </Button>
+                    )}
                   </div>
                 </ScrollArea>
               </CardContent>

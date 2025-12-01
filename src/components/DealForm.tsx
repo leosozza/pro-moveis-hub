@@ -7,8 +7,8 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { useToast } from "@/hooks/use-toast";
-import { supabase } from "@/integrations/supabase/client";
 import { Loader2 } from "lucide-react";
+import { useCreateDeal } from "@/modules/crm";
 
 const formSchema = z.object({
   title: z.string().min(2, "Título deve ter pelo menos 2 caracteres"),
@@ -29,6 +29,7 @@ interface DealFormProps {
 export const DealForm = ({ pipelineId, stageId, onSuccess, onCancel }: DealFormProps) => {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const { toast } = useToast();
+  const createDeal = useCreateDeal();
 
   const form = useForm<FormData>({
     resolver: zodResolver(formSchema),
@@ -43,33 +44,14 @@ export const DealForm = ({ pipelineId, stageId, onSuccess, onCancel }: DealFormP
   const onSubmit = async (data: FormData) => {
     setIsSubmitting(true);
     try {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) throw new Error("Usuário não autenticado");
-
-      const { data: profile } = await supabase
-        .from("profiles")
-        .select("company_id")
-        .eq("id", user.id)
-        .single();
-
-      if (!profile) throw new Error("Perfil não encontrado");
-
-      // Criar deal com dados inline do cliente
-      const { error } = await supabase
-        .from("deals")
-        .insert({
-          title: data.title,
-          customer_name: data.customer_name,
-          customer_phone: data.customer_phone,
-          description: data.description,
-          company_id: profile.company_id,
-          pipeline_id: pipelineId,
-          stage_id: stageId,
-          responsible_id: user.id,
-          position: 0,
-        });
-
-      if (error) throw error;
+      await createDeal.mutateAsync({
+        title: data.title,
+        customerName: data.customer_name,
+        customerPhone: data.customer_phone,
+        description: data.description,
+        pipelineId,
+        stageId,
+      });
 
       toast({
         title: "Lead criado",
@@ -78,10 +60,11 @@ export const DealForm = ({ pipelineId, stageId, onSuccess, onCancel }: DealFormP
 
       form.reset();
       onSuccess?.();
-    } catch (error: any) {
+    } catch (error: unknown) {
+      const errorMessage = error instanceof Error ? error.message : "Erro ao criar lead";
       toast({
         title: "Erro ao criar lead",
-        description: error.message,
+        description: errorMessage,
         variant: "destructive",
       });
     } finally {

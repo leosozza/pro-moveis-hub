@@ -1,6 +1,8 @@
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
+import { KanbanBoard, KanbanCard } from "@/components/KanbanBoard";
+import { useQueryClient } from "@tanstack/react-query";
 import { KanbanBoard } from "@/components/KanbanBoard";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -10,23 +12,17 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Loader2 } from "lucide-react";
 import { toast } from "sonner";
-
-interface Ticket {
-  id: string;
-  title: string;
-  stage_id: string;
-  position: number;
-  priority?: string;
-  customers?: { name: string } | null;
-  projects?: { name: string } | null;
-  profiles?: { full_name: string } | null;
-}
+import { usePipeline } from "@/modules/crm";
+import { mapStageToLegacy } from "@/modules/crm/adapters/crm.adapters";
+import { useServiceTickets, useCreateServiceTicket, useMoveTicket } from "@/modules/support";
+import { useCustomersForSelection } from "@/modules/crm/hooks/useCustomers";
+import { useProjectsForSelection } from "@/modules/projects";
 
 const Assistencia = () => {
   const queryClient = useQueryClient();
   const [openNewTicket, setOpenNewTicket] = useState(false);
   const [selectedStageId, setSelectedStageId] = useState<string>("");
-  const [selectedTicket, setSelectedTicket] = useState<Ticket | null>(null);
+  const [selectedTicket, setSelectedTicket] = useState<KanbanCard | null>(null);
   const [formData, setFormData] = useState({
     title: "",
     description: "",
@@ -35,92 +31,44 @@ const Assistencia = () => {
     priority: "media",
   });
 
-  const { data: pipeline } = useQuery({
-    queryKey: ["assistencia_pipeline"],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from("pipelines")
-        .select("*, stages(*)")
-        .eq("type", "assistencia")
-        .order("created_at", { ascending: true })
-        .limit(1);
-      if (error) throw error;
-      
-      const pipelineData = data?.[0] || null;
-      
-      // Ordenar stages por position
-      if (pipelineData?.stages) {
-        pipelineData.stages = pipelineData.stages.sort((a: { position: number }, b: { position: number }) => a.position - b.position);
-      }
-      
-      return pipelineData;
-    },
-  });
+  // Use CRM hooks for pipeline
+  const { data: pipeline } = usePipeline('assistencia');
+  
+  // Use Support hooks for tickets
+  const { ticketsLegacy, isLoading } = useServiceTickets(pipeline?.id);
+  const createTicket = useCreateServiceTicket(pipeline?.id || '');
+  const moveTicket = useMoveTicket();
 
-  const { data: tickets, isLoading } = useQuery({
-    queryKey: ["service_tickets"],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from("service_tickets")
-        .select(`
-          *,
-          customers:customer_id(name),
-          projects:project_id(name),
-          profiles:responsible_id(full_name)
-        `)
-        .eq("pipeline_id", pipeline?.id)
-        .order("position");
-      if (error) throw error;
-      return data;
-    },
-    enabled: !!pipeline?.id,
-  });
+  // Use hooks for customers and projects
+  const { data: customers } = useCustomersForSelection();
+  const { data: projects } = useProjectsForSelection();
 
-  const { data: customers } = useQuery({
-    queryKey: ["customers"],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from("customers")
-        .select("id, name")
-        .order("name");
-      if (error) throw error;
-      return data;
-    },
-  });
+  const handleCardMove = async (cardId: string, newStageId: string) => {
+    try {
+      await moveTicket.mutateAsync({ ticketId: cardId, newStageId });
+      toast.success("Card movido com sucesso!");
+    } catch (error: unknown) {
+      const errorMessage = error instanceof Error ? error.message : "Erro ao mover card";
+      toast.error(errorMessage);
+    }
+  };
 
-  const { data: projects } = useQuery({
-    queryKey: ["projects"],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from("projects")
-        .select("id, name")
-        .order("name");
-      if (error) throw error;
-      return data;
-    },
-  });
-
-  const createTicket = useMutation({
-    mutationFn: async (data: typeof formData & { stage_id: string }) => {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) throw new Error("Não autenticado");
-      
-      const { data: profile } = await supabase
-        .from("profiles")
-        .select("company_id")
-        .eq("id", user.id)
-        .single();
-      
-      const { error } = await supabase.from("service_tickets").insert([{
-        ...data,
-        company_id: profile?.company_id,
-        pipeline_id: pipeline?.id,
-        responsible_id: user.id,
-      }]);
-      if (error) throw error;
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["service_tickets"] });
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedStageId) {
+      toast.error("Selecione um estágio");
+      return;
+    }
+    
+    try {
+      await createTicket.mutateAsync({
+        title: formData.title,
+        description: formData.description,
+        customerId: formData.customer_id,
+        projectId: formData.project_id || undefined,
+        stageId: selectedStageId,
+        priority: formData.priority,
+      });
       toast.success("Chamado criado com sucesso!");
       setOpenNewTicket(false);
       setFormData({
@@ -131,23 +79,51 @@ const Assistencia = () => {
         priority: "media",
       });
     },
-    onError: (error: any) => {
+    onError: (error: Error) => {
       toast.error(error.message || "Erro ao criar chamado");
     },
   });
+
+  const moveTicketMutation = useMutation({
+    mutationFn: async ({ cardId, newStageId }: { cardId: string; newStageId: string }) => {
+      const { error } = await supabase
+        .from("service_tickets")
+        .update({ stage_id: newStageId })
+        .eq("id", cardId);
+      
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["service_tickets"] });
+      toast.success("Card movido com sucesso!");
+    },
+    onError: (error: Error) => {
+      toast.error(error.message || "Erro ao mover card");
+    },
+  });
+
+  const handleCardMove = async (cardId: string, newStageId: string) => {
+    await moveTicketMutation.mutateAsync({ cardId, newStageId });
+  };
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedStageId) {
       toast.error("Selecione um estágio");
       return;
+    } catch (error: unknown) {
+      const errorMessage = error instanceof Error ? error.message : "Erro ao criar chamado";
+      toast.error(errorMessage);
     }
-    createTicket.mutate({ ...formData, stage_id: selectedStageId });
   };
 
   const handleAddCard = (stageId: string) => {
     setSelectedStageId(stageId);
     setOpenNewTicket(true);
+  };
+
+  const handleCardClick = (card: KanbanCard) => {
+    setSelectedTicket(card);
   };
 
   if (isLoading) {
@@ -157,6 +133,9 @@ const Assistencia = () => {
       </div>
     );
   }
+
+  // Get stages in legacy format for KanbanBoard
+  const stagesLegacy = pipeline?.stages?.map(mapStageToLegacy) || [];
 
   return (
     <div className="p-8">
@@ -169,9 +148,15 @@ const Assistencia = () => {
         <KanbanBoard
           stages={pipeline.stages || []}
           cards={tickets || []}
+          onCardClick={handleCardClick}
+          onCardMove={handleCardMove}
+          onAddCard={handleAddCard}
+          isMoving={moveTicketMutation.isPending}
+          stages={stagesLegacy}
+          cards={ticketsLegacy}
           onCardClick={setSelectedTicket}
           onAddCard={handleAddCard}
-          tableName="service_tickets"
+          onCardMove={handleCardMove}
         />
       )}
 
