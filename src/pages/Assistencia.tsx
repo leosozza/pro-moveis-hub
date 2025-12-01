@@ -20,7 +20,7 @@ const Assistencia = () => {
   const queryClient = useQueryClient();
   const [openNewTicket, setOpenNewTicket] = useState(false);
   const [selectedStageId, setSelectedStageId] = useState<string>("");
-  const [selectedTicket, setSelectedTicket] = useState<ServiceTicket | null>(null);
+  const [_selectedTicket, setSelectedTicket] = useState<ServiceTicket | null>(null);
   const [formData, setFormData] = useState({
     title: "",
     description: "",
@@ -97,11 +97,16 @@ const Assistencia = () => {
   };
 
   const handleCardMove = async (cardId: string, newStageId: string) => {
-    await moveTicket(cardId, newStageId);
+    try {
+      await moveTicket(cardId, newStageId);
+    } catch (error) {
+      // Error already handled by hook with toast
+      console.error('Failed to move ticket:', error);
+    }
   };
 
   // Map tickets to KanbanCard format
-  const kanbanCards = useMemo(() => tickets.map(ticket => ({
+  const kanbanCards = useMemo(() => (tickets || []).map(ticket => ({
     id: ticket.id,
     title: ticket.title,
     description: ticket.description,

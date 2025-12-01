@@ -14,7 +14,12 @@ const PosVenda = () => {
   const { moveDeal, isLoading: movingDeal } = useMoveDeal();
 
   const handleCardMove = async (cardId: string, newStageId: string) => {
-    await moveDeal(cardId, newStageId);
+    try {
+      await moveDeal(cardId, newStageId);
+    } catch (error) {
+      // Error already handled by hook with toast
+      console.error('Failed to move deal:', error);
+    }
   };
 
   if (pipelineLoading || dealsLoading) {

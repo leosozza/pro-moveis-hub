@@ -34,11 +34,16 @@ const Vendas = () => {
   };
 
   const handleCardMove = async (cardId: string, newStageId: string) => {
-    await moveDeal(cardId, newStageId);
+    try {
+      await moveDeal(cardId, newStageId);
+    } catch (error) {
+      // Error already handled by hook with toast
+      console.error('Failed to move deal:', error);
+    }
   };
 
   // Map deals to include customers property for KanbanBoard compatibility
-  const mappedDeals = useMemo(() => deals.map(d => ({
+  const mappedDeals = useMemo(() => (deals || []).map(d => ({
     ...d,
     customers: d.customer_name ? { name: d.customer_name } : d.customers,
   })), [deals]);

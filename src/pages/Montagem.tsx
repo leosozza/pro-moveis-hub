@@ -31,22 +31,33 @@ const Montagem = () => {
     e.preventDefault();
     if (!selectedOrder) return;
     
-    await createInspection({
-      ...inspectionData,
-      assembly_order_id: selectedOrder.id,
-    });
-    
-    setOpenInspection(false);
-    setSelectedOrder(null);
-    setInspectionData({
-      customer_name: "",
-      approved: false,
-      observations: "",
-    });
+    try {
+      await createInspection({
+        ...inspectionData,
+        assembly_order_id: selectedOrder.id,
+      });
+      
+      setOpenInspection(false);
+      setSelectedOrder(null);
+      setInspectionData({
+        customer_name: "",
+        approved: false,
+        observations: "",
+      });
+    } catch (error) {
+      // Error already handled by hook with toast
+      // Keep form open and data intact for retry
+      console.error('Failed to create inspection:', error);
+    }
   };
 
   const handleStatusUpdate = async (orderId: string, status: AssemblyStatus) => {
-    await updateStatus(orderId, status);
+    try {
+      await updateStatus(orderId, status);
+    } catch (error) {
+      // Error already handled by hook with toast
+      console.error('Failed to update status:', error);
+    }
   };
 
   const getStatusBadge = (status: string) => {

@@ -13,7 +13,7 @@ export interface ServiceTicket {
   customer_id: string;
   project_id: string | null;
   responsible_id: string | null;
-  priority: string | null;
+  priority: TicketPriority | null;
   company_id: string;
   created_at: string;
   updated_at: string;
