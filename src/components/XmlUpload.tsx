@@ -3,8 +3,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
-import { supabase } from "@/integrations/supabase/client";
 import { Loader2, Upload } from "lucide-react";
+import { xmlService } from "@/modules/projects/services/xml.service";
 
 interface XmlUploadProps {
   projectId: string;
@@ -23,77 +23,43 @@ export const XmlUpload = ({ projectId, customerId, onSuccess }: XmlUploadProps) 
     setIsUploading(true);
 
     try {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) throw new Error("Usuário não autenticado");
-
-      const { data: profile } = await supabase
-        .from("profiles")
-        .select("company_id")
-        .eq("id", user.id)
-        .single();
-
-      if (!profile) throw new Error("Perfil não encontrado");
-
       for (const file of Array.from(files)) {
-        // Validar nome do arquivo: <customerId>_<ambiente>.xml
-        const fileName = file.name;
-        const match = fileName.match(/^(.+)_(.+)\.xml$/i);
+        // Validate file name format
+        const validation = xmlService.validateFileName(file.name);
         
-        if (!match) {
+        if (!validation.isValid) {
           toast({
             title: "Nome inválido",
-            description: `Arquivo ${fileName} deve seguir o padrão: clienteId_ambiente.xml`,
+            description: `Arquivo ${file.name} deve seguir o padrão: clienteId_ambiente.xml`,
             variant: "destructive",
           });
           continue;
         }
 
-        const [, fileCustomerId, ambiente] = match;
+        try {
+          // Upload and process XML using the xml service
+          const result = await xmlService.uploadAndProcessXml(file, projectId, customerId);
 
-        // Fazer upload do arquivo
-        const filePath = `${profile.company_id}/${projectId}/${fileName}`;
-        const { error: uploadError } = await supabase.storage
-          .from("project-files")
-          .upload(filePath, file);
-
-        if (uploadError) throw uploadError;
-
-        // Registrar arquivo no banco
-        const { data: promobFile, error: fileError } = await supabase
-          .from("promob_files")
-          .insert({
-            company_id: profile.company_id,
-            project_id: projectId,
-            customer_id: customerId,
-            file_path: filePath,
-            original_filename: fileName,
-            ambiente: ambiente,
-            file_type: "vendido",
-            uploaded_by: user.id,
-          })
-          .select()
-          .single();
-
-        if (fileError) throw fileError;
-
-        // Processar XML via Edge Function
-        const { data, error: processError } = await supabase.functions.invoke("process-xml", {
-          body: { promob_file_id: promobFile.id },
-        });
-
-        if (processError) throw processError;
-
-        toast({
-          title: "XML processado",
-          description: `${fileName} importado com sucesso! ${data.items_count} itens adicionados.`,
-        });
+          toast({
+            title: "XML processado",
+            description: `${file.name} importado com sucesso! ${result.itemsCount} itens adicionados.`,
+          });
+        } catch (error: unknown) {
+          const errorMessage = error instanceof Error ? error.message : "Erro ao processar arquivo";
+          toast({
+            title: "Erro no upload",
+            description: errorMessage,
+            variant: "destructive",
+          });
+        }
       }
 
       onSuccess?.();
-    } catch (error: any) {
+    } catch (error: unknown) {
+      const errorMessage = error instanceof Error ? error.message : "Erro ao fazer upload";
       toast({
         title: "Erro no upload",
-        description: error.message,
+        description: errorMessage,
         variant: "destructive",
       });
     } finally {

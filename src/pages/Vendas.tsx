@@ -2,12 +2,16 @@ import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { KanbanBoard, KanbanCard } from "@/components/KanbanBoard";
+import { useQueryClient } from "@tanstack/react-query";
+import { KanbanBoard } from "@/components/KanbanBoard";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Loader2, Settings } from "lucide-react";
 import { DealForm } from "@/components/DealForm";
 import { DealDetails } from "@/components/DealDetails";
 import { StageConfigModal } from "@/components/StageConfigModal";
+import { usePipeline, useDeals, useMoveDeal } from "@/modules/crm";
+import { mapStageToLegacy } from "@/modules/crm/adapters/crm.adapters";
 import { toast } from "sonner";
 
 const Vendas = () => {
@@ -18,44 +22,20 @@ const Vendas = () => {
   const [selectedStageId, setSelectedStageId] = useState<string>("");
   const [selectedDeal, setSelectedDeal] = useState<{ id: string; title: string; customer_name?: string } | null>(null);
 
-  const { data: pipeline } = useQuery({
-    queryKey: ["vendas_pipeline"],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from("pipelines")
-        .select("*, stages(*)")
-        .eq("type", "vendas")
-        .order("created_at", { ascending: true })
-        .limit(1);
-      if (error) throw error;
-      
-      const pipelineData = data?.[0] || null;
-      
-      // Ordenar stages por position
-      if (pipelineData?.stages) {
-        pipelineData.stages = pipelineData.stages.sort((a: { position: number }, b: { position: number }) => a.position - b.position);
-      }
-      
-      return pipelineData;
-    },
-  });
+  // Use CRM hooks
+  const { data: pipeline } = usePipeline('vendas');
+  const { dealsLegacy, isLoading } = useDeals(pipeline?.id);
+  const moveDeal = useMoveDeal();
 
-  const { data: deals, isLoading } = useQuery({
-    queryKey: ["deals"],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from("deals")
-        .select("*")
-        .eq("pipeline_id", pipeline?.id)
-        .order("position");
-      if (error) throw error;
-      return data?.map(d => ({
-        ...d,
-        customers: d.customer_name ? { name: d.customer_name } : null,
-      }));
-    },
-    enabled: !!pipeline?.id,
-  });
+  const handleCardMove = async (cardId: string, newStageId: string) => {
+    try {
+      await moveDeal.mutateAsync({ dealId: cardId, newStageId });
+      toast.success("Card movido com sucesso!");
+    } catch (error: unknown) {
+      const errorMessage = error instanceof Error ? error.message : "Erro ao mover card";
+      toast.error(errorMessage);
+    }
+  };
 
   const moveDealMutation = useMutation({
     mutationFn: async ({ cardId, newStageId }: { cardId: string; newStageId: string }) => {
@@ -100,6 +80,9 @@ const Vendas = () => {
       </div>
     );
   }
+
+  // Get stages in legacy format for KanbanBoard
+  const stagesLegacy = pipeline?.stages?.map(mapStageToLegacy) || [];
 
   // Verificar se o pipeline existe e tem estágios
   if (!pipeline?.id || !pipeline?.stages || pipeline.stages.length === 0) {
@@ -165,12 +148,13 @@ const Vendas = () => {
       </div>
 
       <KanbanBoard
-        stages={pipeline.stages}
-        cards={deals || []}
+        stages={stagesLegacy}
+        cards={dealsLegacy}
         onCardClick={handleCardClick}
         onCardMove={handleCardMove}
         onAddCard={handleAddCard}
         isMoving={moveDealMutation.isPending}
+        onCardMove={handleCardMove}
       />
 
       <Dialog open={openNewDeal} onOpenChange={setOpenNewDeal}>

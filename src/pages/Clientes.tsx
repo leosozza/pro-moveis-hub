@@ -1,18 +1,16 @@
 import { useState } from "react";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Plus, Search, Phone, Mail, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { Textarea } from "@/components/ui/textarea";
+import { useCustomers, useCreateCustomer } from "@/modules/crm/hooks/useCustomers";
 
 const Clientes = () => {
-  const queryClient = useQueryClient();
   const [open, setOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
   const [formData, setFormData] = useState({
@@ -29,41 +27,26 @@ const Clientes = () => {
     observacoes: "",
   });
 
-  const { data: customers, isLoading } = useQuery({
-    queryKey: ["customers"],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from("customers")
-        .select("*")
-        .order("created_at", { ascending: false });
-      
-      if (error) throw error;
-      return data;
-    },
-  });
+  // Use CRM hooks
+  const { data: customers, isLoading } = useCustomers();
+  const createCustomer = useCreateCustomer();
 
-  const createCustomer = useMutation({
-    mutationFn: async (data: typeof formData) => {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) throw new Error("Usuário não autenticado");
-      
-      const { data: profile } = await supabase
-        .from("profiles")
-        .select("company_id")
-        .eq("id", user.id)
-        .single();
-      
-      if (!profile) throw new Error("Perfil não encontrado");
-      
-      const { error } = await supabase.from("customers").insert([{
-        ...data,
-        company_id: profile.company_id,
-        created_by: user.id,
-      }]);
-      if (error) throw error;
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["customers"] });
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    try {
+      await createCustomer.mutateAsync({
+        name: formData.name,
+        whatsapp: formData.whatsapp || undefined,
+        phone: formData.phone || undefined,
+        email: formData.email || undefined,
+        cpfCnpj: formData.cpf_cnpj || undefined,
+        address: formData.address || undefined,
+        city: formData.city || undefined,
+        state: formData.state || undefined,
+        zipCode: formData.zip_code || undefined,
+        origem: formData.origem || undefined,
+        observacoes: formData.observacoes || undefined,
+      });
       toast.success("Cliente cadastrado com sucesso!");
       setOpen(false);
       setFormData({
@@ -79,21 +62,16 @@ const Clientes = () => {
         origem: "",
         observacoes: "",
       });
-    },
-    onError: (error: any) => {
-      toast.error(error.message || "Erro ao cadastrar cliente");
-    },
-  });
-
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    createCustomer.mutate(formData);
+    } catch (error: unknown) {
+      const errorMessage = error instanceof Error ? error.message : "Erro ao cadastrar cliente";
+      toast.error(errorMessage);
+    }
   };
 
   const filteredCustomers = customers?.filter((customer) =>
     customer.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
     customer.email?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    customer.cpf_cnpj?.toLowerCase().includes(searchTerm.toLowerCase())
+    customer.cpfCnpj?.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
   return (
@@ -284,7 +262,7 @@ const Clientes = () => {
                         )}
                       </div>
                     </TableCell>
-                    <TableCell>{customer.cpf_cnpj || "-"}</TableCell>
+                    <TableCell>{customer.cpfCnpj || "-"}</TableCell>
                     <TableCell>{customer.city || "-"}</TableCell>
                     <TableCell>{customer.origem || "-"}</TableCell>
                   </TableRow>

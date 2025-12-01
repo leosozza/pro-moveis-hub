@@ -15,6 +15,7 @@ export interface KanbanStage {
 }
 
 export interface KanbanCard {
+interface KanbanCard {
   id: string;
   title: string;
   stage_id: string;
@@ -49,6 +50,24 @@ export const KanbanBoard = ({
 }: KanbanBoardProps) => {
   const [draggedCard, setDraggedCard] = useState<KanbanCard | null>(null);
   const [isMovingCard, setIsMovingCard] = useState(false);
+  position: number;
+  customers?: { name: string } | null;
+  estimated_value?: number | null;
+  priority?: string;
+  customer_name?: string | null;
+}
+
+interface KanbanBoardProps {
+  stages: Stage[];
+  cards: KanbanCard[];
+  onCardClick: (card: KanbanCard) => void;
+  onAddCard: (stageId: string) => void;
+  onCardMove?: (cardId: string, newStageId: string) => Promise<void>;
+}
+
+export const KanbanBoard = ({ stages, cards, onCardClick, onAddCard, onCardMove }: KanbanBoardProps) => {
+  const [draggedCard, setDraggedCard] = useState<KanbanCard | null>(null);
+  const [isMoving, setIsMoving] = useState(false);
 
   const handleDragStart = (card: KanbanCard) => {
     setDraggedCard(card);
@@ -71,6 +90,13 @@ export const KanbanBoard = ({
     } finally {
       setIsMovingCard(false);
       setDraggedCard(null);
+    if (draggedCard && draggedCard.stage_id !== stageId && onCardMove && !isMoving) {
+      setIsMoving(true);
+      try {
+        await onCardMove(draggedCard.id, stageId);
+      } finally {
+        setIsMoving(false);
+      }
     }
   };
 
@@ -82,6 +108,7 @@ export const KanbanBoard = ({
   };
 
   const getPriorityVariant = (priority?: string): "destructive" | "default" | "secondary" | "outline" => {
+  const getPriorityColor = (priority?: string): "default" | "secondary" | "destructive" | "outline" => {
     switch (priority) {
       case 'urgente': return 'destructive';
       case 'alta': return 'default';
@@ -183,6 +210,36 @@ export const KanbanBoard = ({
                         onClick={() => onCardClick?.(card)}
                       >
                         {renderCard(card)}
+                        <CardHeader className="p-3 space-y-1">
+                          <div className="flex items-start justify-between gap-2">
+                            <CardTitle className="text-sm font-medium line-clamp-2">
+                              {card.title}
+                            </CardTitle>
+                            <GripVertical className="h-4 w-4 text-muted-foreground flex-shrink-0" />
+                          </div>
+                          {card.description && (
+                            <CardDescription className="text-xs line-clamp-2">
+                              {card.description}
+                            </CardDescription>
+                          )}
+                        </CardHeader>
+                        <CardContent className="p-3 pt-0 space-y-2">
+                          {card.customers && (
+                            <div className="text-xs text-muted-foreground">
+                              👤 {card.customers.name}
+                            </div>
+                          )}
+                          {card.estimated_value && (
+                            <div className="text-xs font-medium text-primary">
+                              {formatCurrency(card.estimated_value)}
+                            </div>
+                          )}
+                          {card.priority && (
+                            <Badge variant={getPriorityColor(card.priority)} className="text-xs">
+                              {card.priority}
+                            </Badge>
+                          )}
+                        </CardContent>
                       </Card>
                     ))}
                     {onAddCard && (
