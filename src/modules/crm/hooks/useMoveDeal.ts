@@ -5,14 +5,19 @@ import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { moveDeal } from '../services/deals.service';
 import { toast } from 'sonner';
 
-export const useMoveDeal = () => {
+export const useMoveDeal = (pipelineId?: string) => {
   const queryClient = useQueryClient();
 
   const mutation = useMutation({
     mutationFn: ({ dealId, newStageId }: { dealId: string; newStageId: string }) =>
       moveDeal(dealId, newStageId),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['deals'] });
+      // Invalidate specific pipeline query if pipelineId is provided, otherwise invalidate all
+      if (pipelineId) {
+        queryClient.invalidateQueries({ queryKey: ['deals', pipelineId] });
+      } else {
+        queryClient.invalidateQueries({ queryKey: ['deals'] });
+      }
       toast.success('Card movido com sucesso!');
     },
     onError: (error: Error) => {

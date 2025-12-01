@@ -21,7 +21,7 @@ const Vendas = () => {
 
   const { pipeline, isLoading: pipelineLoading } = usePipelineByType('vendas');
   const { deals, isLoading: dealsLoading } = useDeals(pipeline?.id);
-  const { moveDeal, isLoading: movingDeal } = useMoveDeal();
+  const { moveDeal, isLoading: movingDeal } = useMoveDeal(pipeline?.id);
 
   const handleAddCard = (stageId: string) => {
     setSelectedStageId(stageId);

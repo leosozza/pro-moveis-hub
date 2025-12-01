@@ -11,7 +11,7 @@ const PosVenda = () => {
 
   const { pipeline, isLoading: pipelineLoading } = usePipelineByType('pos_venda');
   const { deals, isLoading: dealsLoading } = useDeals(pipeline?.id);
-  const { moveDeal, isLoading: movingDeal } = useMoveDeal();
+  const { moveDeal, isLoading: movingDeal } = useMoveDeal(pipeline?.id);
 
   const handleCardMove = async (cardId: string, newStageId: string) => {
     try {
